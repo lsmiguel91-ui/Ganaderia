@@ -849,7 +849,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
     </div>
     <div class="fg">
       <label>🔗 Fondo de Finanzas <span style="color:var(--tx3);font-weight:400;">— el lote que creaste en Finanzas con esta plata</span></label>
-      <select id="l-finanzas-vinculo"><option value="">— Sin vincular —</option></select>
+      <select id="l-finanzas-vinculo" onchange="aplicarFondoFinanzas()"><option value="">— Sin vincular —</option></select>
       <div id="l-finanzas-vinculo-info" style="font-size:11px;color:var(--tx3);margin-top:4px;line-height:1.35;"></div>
     </div>
     <div class="fg-row">
@@ -1031,7 +1031,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v1';
+const APP_VERSION = 'v2';
 const APP_FECHA = '2026-10-28';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -1333,6 +1333,13 @@ function normalizarDb() {
   if (!db.vacunas) db.vacunas = [];
   limpiarVacunasLegacy();
   crbAgendarDosisAdicional(null);
+  // Reparación: lotes activos cuya fecha de venta estimada se calculó con la regla vieja
+  // (compra + plazo × 30.44 días) pasan a la regla común con Finanzas (meses de calendario).
+  (db.lotes || []).forEach(l => {
+    if (loteCerrado(l) || !l.fechaCompra || !l.plazoEst || !l.fventaEst) return;
+    const d = parseFechaLocal(l.fechaCompra); d.setDate(d.getDate() + Math.round(l.plazoEst * 30.44));
+    if (fechaLocalStr(d) === l.fventaEst) l.fventaEst = fechaPorPlazo(l.fechaCompra, l.plazoEst);
+  });
 }
 async function leerDrive() {
   if (!SCRIPT_URL) throw new Error('falta configurar la conexión con Drive (🗄️ Datos)');
@@ -1358,7 +1365,7 @@ function sincronizarConDrive() {
     const sello = leerPendiente();
     const remoto = await leerDrive();
     const antes = _js(db);
-    db = sello ? sincUnirDatos(db, leerBase(), remoto) : remoto;
+    db = sello ? sincUnirDatos(db, leerBase(), remoto) : JSON.parse(_js(remoto));   // copia: normalizarDb no debe tocar 'remoto'
     normalizarDb();
     const enviado = _js(db);   // la base es exactamente lo que quedó en Drive, no lo editado después
     if (enviado !== _js(remoto)) await escribirDrive(JSON.parse(enviado));
@@ -1522,6 +1529,23 @@ function sumarMeses(fecha, n) {
   return d;
 }
 function hoy() { return fechaLocalStr(new Date()); }
+// Plazo en meses (acepta decimales) → fecha: meses enteros de calendario + la fracción en días
+// (30.44 por mes). Es la misma regla de Finanzas, así la fecha estimada coincide en las dos apps.
+function fechaPorPlazo(fi, plazo) {
+  const p = parseFloat(plazo) || 0, ent = Math.floor(p);
+  const d = sumarMeses(fi, ent);
+  d.setDate(d.getDate() + Math.round((p - ent) * 30.44));
+  return fechaLocalStr(d);
+}
+// Inverso: de compra a venta → meses (1 decimal)
+function plazoEntre(fi, fv) {
+  const a = parseFechaLocal(fi), b = parseFechaLocal(fv);
+  if (!(b > a)) return 0;
+  let m = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  while (m > 0 && sumarMeses(fi, m) > b) m--;
+  const resto = Math.round((b - sumarMeses(fi, m)) / 86400000);
+  return Math.round((m + resto / 30.44) * 10) / 10;
+}
 function mesDeStr(str) { // "2025-07-15" → 7
   if (!str) return 0;
   return parseInt(str.split('-')[1]);
@@ -3121,9 +3145,7 @@ function calcFventaEst() {
   const out = document.getElementById('l-fventa-est');
   if (!out) return;
   if (fi && plazo > 0) {
-    const d = new Date(fi + 'T12:00:00');
-    d.setDate(d.getDate() + Math.round(plazo * 30.44));
-    out.value = fechaLocalStr(d);
+    out.value = fechaPorPlazo(fi, plazo);
   } else { out.value = ''; }
 }
 function calcPlazoFromFecha() {
@@ -3131,11 +3153,9 @@ function calcPlazoFromFecha() {
   const fv = document.getElementById('l-fventa-est')?.value;
   const plazoInput = document.getElementById('l-plazo');
   if (!fi || !fv || !plazoInput) return;
-  const dCompra = new Date(fi + 'T12:00:00');
-  const dVenta = new Date(fv + 'T12:00:00');
-  const dias = Math.round((dVenta - dCompra) / 86400000);
-  if (dias <= 0) return;
-  plazoInput.value = Math.max(0.1, Math.round((dias / 30.44) * 10) / 10);
+  const p = plazoEntre(fi, fv);
+  if (p <= 0) return;
+  plazoInput.value = Math.max(0.1, p);
 }
 function toggleRepro() {
   const sexo = document.getElementById('a-sexo').value;
@@ -3537,9 +3557,7 @@ function renderLotes() {
     if (l.fventaEst) {
       fventaEst = fd(l.fventaEst);
     } else if (l.plazoEst && l.fechaCompra) {
-      const d = new Date(l.fechaCompra + 'T12:00:00');
-      d.setDate(d.getDate() + Math.round(l.plazoEst * 30.44));
-      fventaEst = fd(fechaLocalStr(d));
+      fventaEst = fd(fechaPorPlazo(l.fechaCompra, l.plazoEst));
     }
     const fventaReal = esParcial ? (vendido ? fd(l.fechaLiquidacion) : '—') : (vendido ? fd(l.fechaVenta) : '—');
     const estado = vendido ? `<span class="badge b-cerrado">${esParcial?'Liquidado':'Vendido'}</span>` : `<span class="badge b-abierto">${esParcial?'Parcial':'Activo'}</span>`;
@@ -4217,7 +4235,7 @@ async function cargarFondosFinanzas(vinculoActual) {
     const usados = new Set((db.lotes || []).filter(l => l.finanzasVinculo && String(l.id) !== String(editLoteId)).map(l => String(l.finanzasVinculo.id)));
     const fondos = ((j.data.inv && j.data.inv.ganado) || []).filter(g => g.origen !== 'ganaderia' && !(g.ventaReal > 0) && !usados.has(String(g.id)));
     _fondosFin = {};
-    fondos.forEach(g => { _fondosFin[String(g.id)] = { id: g.id, desc: g.desc || 'Lote sin nombre', cap: g.cap || 0, enFormacion: !!g.enFormacion }; });
+    fondos.forEach(g => { _fondosFin[String(g.id)] = { id: g.id, desc: g.desc || 'Lote sin nombre', cap: g.cap || 0, enFormacion: !!g.enFormacion, fi: g.fi || '', plazo: g.plazo || null, ff: g.ff || '' }; });
     sel.innerHTML = ''; sel.appendChild(opcion('', '— Sin vincular —'));
     fondos.forEach(g => sel.appendChild(opcion(String(g.id), (g.desc || 'Lote sin nombre') + ' · ' + fm(g.cap || 0) + (g.enFormacion ? ' (en formación)' : ''))));
     if (vinculoActual && !_fondosFin[idActual]) sel.appendChild(opcion(idActual, vinculoActual.desc + ' · ' + fm(vinculoActual.cap || 0) + ' (ya vinculado)'));
@@ -4228,6 +4246,26 @@ async function cargarFondosFinanzas(vinculoActual) {
   } catch (e) {
     info.textContent = '⚠️ No se pudo leer Finanzas (' + String(e.message || e).slice(0, 60) + '). Puedes guardar igual y vincular después.';
   }
+}
+// Al elegir el lote de Finanzas en un lote NUEVO, precarga lo que ya se registró allá:
+// nombre, fecha de compra, monto (en el primer ítem), plazo y fecha de venta estimada.
+// Solo llena campos vacíos (la fecha del primer ítem se toma de Finanzas); el resto se completa aquí.
+function aplicarFondoFinanzas() {
+  const v = (document.getElementById('l-finanzas-vinculo') || {}).value;
+  const f = _fondosFin[v];
+  if (!f || editLoteId !== null) return;
+  const vacio = id => { const el = document.getElementById(id); return el && !el.value; };
+  const poner = (id, val) => { const el = document.getElementById(id); if (el && val !== null && val !== undefined && val !== '') el.value = val; };
+  if (vacio('l-nombre')) poner('l-nombre', f.desc);
+  if (!document.querySelector('[id^="lote-item-"]')) agregarItemLote();
+  const n = document.querySelector('[id^="lote-item-"]').id.split('-')[2];
+  if (f.fi) poner('li-fcompra-' + n, f.fi);
+  if (vacio('li-val-' + n)) poner('li-val-' + n, f.cap);
+  recalcFventaEstFromItems();
+  if (vacio('l-plazo') && f.plazo) { poner('l-plazo', f.plazo); calcFventaEst(); }
+  if (f.ff) { poner('l-fventa-est', f.ff); calcPlazoFromFecha(); }
+  const info = document.getElementById('l-finanzas-vinculo-info');
+  if (info) info.textContent = '📥 Precargado desde Finanzas: nombre, fecha de compra, monto y plazo. Completa tipo, cantidad, peso y gastos.';
 }
 function leerVinculoFinanzas(existente) {
   const sel = document.getElementById('l-finanzas-vinculo');
@@ -6345,6 +6383,9 @@ function lotesToInvGanado() {
       // Lote activo: usar plazoEst si existe, sino meses transcurridos
       plazo = lote.plazoEst || Math.max(1, Math.round((new Date()-parseFechaLocal(fi))/(1000*60*60*24*30.44)));
       tasa = 0;
+      // Fecha fin exacta: Finanzas la usa tal cual (no la recalcula), así ambas apps muestran el mismo día
+      const ffExacta = lote.fventaEst || (lote.plazoEst ? fechaPorPlazo(fi, lote.plazoEst) : null);
+      if (ffExacta) extra.ff = ffExacta;
     }
     // Descripción: nombre del lote + tipo de ganado
     const tipos = (lote.items||[]).map(i=>i.cantidad+'x '+i.tipo).join(', ');
@@ -7691,8 +7732,7 @@ function sanLoteRender(loteId){
   let retiroHtml='';
   const iv=proto.find(p=>p.id==='iverm0'&&p.fa);
   if(iv&&(l.fventaEst||(l.plazoEst&&l.fechaCompra))){
-    const dFaena=l.fventaEst?new Date(l.fventaEst+'T12:00:00'):new Date(l.fechaCompra+'T12:00:00');
-    if(!l.fventaEst) dFaena.setDate(dFaena.getDate()+Math.round(l.plazoEst*30.44));
+    const dFaena=parseFechaLocal(l.fventaEst||fechaPorPlazo(l.fechaCompra,l.plazoEst));
     const dRet=new Date(iv.fa+'T12:00:00');
     dRet.setDate(dRet.getDate()+42);
     const diff=Math.round((dFaena-dRet)/86400000);

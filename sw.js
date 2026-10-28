@@ -2,7 +2,7 @@
 // El nombre del caché lleva la versión de la app: al publicar una versión nueva
 // cambia el nombre, se descarta el caché viejo y el teléfono deja de quedarse
 // pegado en una versión anterior.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'ganaderia-' + VERSION;
 
 // Lo mínimo para que la app abra sin señal.
