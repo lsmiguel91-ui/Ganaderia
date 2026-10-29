@@ -532,11 +532,11 @@ tr:hover td{background:rgba(240,232,213,.3);}
     </div>
   </div>
 
-  <!-- TABLA GENERAL -->
-  <div id="an-tabla-general" style="margin-bottom:12px;"></div>
+  <!-- ¿COMPRO HOY? / ¿VENDO HOY? -->
+  <div id="an-recomendacion" class="asesor-panel" style="margin-bottom:12px;"></div>
 
-  <!-- INDICADORES -->
-  <div id="an-indicadores" style="margin-bottom:12px;"></div>
+  <!-- SIMULADOR DE INVERSIÓN -->
+  <div id="an-simulador" class="asesor-panel" style="margin-bottom:12px;"></div>
 
   <!-- GRÁFICO BARRAS -->
   <div id="an-chart-bar-wrap" class="asesor-panel" style="margin-bottom:12px;padding:12px;">
@@ -550,20 +550,16 @@ tr:hover td{background:rgba(240,232,213,.3);}
     <canvas id="an-chart-line" height="220"></canvas>
   </div>
 
-  <!-- RANKING MESES -->
-  <div class="asesor-panel" style="margin-bottom:12px;">
-    <div class="sec-title" style="margin-bottom:10px;">📋 Ranking mensual — Venta y Compra</div>
-    <div id="an-ranking"></div>
-  </div>
-
-  <!-- RECOMENDACIÓN -->
-  <div id="an-recomendacion" class="asesor-panel" style="margin-bottom:12px;"></div>
-
-  <!-- PRUEBA HISTÓRICA -->
-  <div id="an-backtest" class="asesor-panel" style="margin-bottom:12px;"></div>
-
-  <!-- SIMULADOR DE INVERSIÓN -->
-  <div id="an-simulador" class="asesor-panel" style="margin-bottom:12px;"></div>
+  <!-- DETALLE (plegado): estado del mercado, tabla por mes y ranking -->
+  <details id="an-detalle" class="asesor-panel" style="margin-bottom:12px;">
+    <summary style="cursor:pointer;font-size:12px;font-weight:800;color:var(--tierra2);">📚 Ver detalle — estado del mercado y comportamiento de cada mes</summary>
+    <div style="margin-top:12px;">
+      <div id="an-indicadores" style="margin-bottom:12px;"></div>
+      <div id="an-tabla-general" style="margin-bottom:12px;"></div>
+      <div class="sec-title" style="margin-bottom:10px;">📋 Ranking mensual — Venta y Compra</div>
+      <div id="an-ranking"></div>
+    </div>
+  </details>
 </div>
 
 <!-- ===== TAB RESUMEN ===== -->
@@ -1031,8 +1027,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v2';
-const APP_FECHA = '2026-10-28';
+const APP_VERSION = 'v3';
+const APP_FECHA = '2026-10-29';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -1849,83 +1845,82 @@ const MKT = (() => {
       return ult.reduce((s, x) => s + mb[x.ym] / x.v, 0) / ult.length;
     });
   }
-  // Señal de COMPRA: por nivel de precio (vs tendencia) + estacionalidad confiable del mes
-  function senalCompra(ci) {
-    const t = tendencia(ci); const es = estacionalidad(ci);
-    if (!t) return null;
-    const mes = new Date().getMonth() + 1;
-    const seas = es ? es.seasAvg[mes] : null, conf = es ? es.confiable[mes] : false;
-    const d = t.desvioPct;
-    let nivelKey, nivelTxt;
-    if (d <= -UMBRAL_SENAL_PCT) { nivelKey = 'ok'; nivelTxt = 'precio ' + Math.abs(d).toFixed(1) + '% bajo su tendencia'; }
-    else if (d >= UMBRAL_SENAL_PCT) { nivelKey = 'err'; nivelTxt = 'precio ' + d.toFixed(1) + '% sobre su tendencia'; }
-    else { nivelKey = 'warn'; nivelTxt = 'precio en su tendencia (' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%)'; }
-    // Ajuste por estacionalidad confiable
-    let key = nivelKey;
-    if (conf && seas < 0 && key === 'warn') key = 'ok';
-    if (conf && seas > 0 && key === 'warn') key = 'err';
-    const proximosBaratos = es ? es.mejoresCompra.map(m => ({ mes: m, pct: es.seasAvg[m], en: ((m - mes + 12) % 12) })) .sort((a, b2) => a.en - b2.en) : [];
-    const icon = key === 'ok' ? '🟢' : key === 'warn' ? '🟡' : '🔴';
-    const titulo = key === 'ok' ? 'BUEN MOMENTO PARA COMPRAR' : key === 'warn' ? 'COMPRA NEUTRA — decide por el animal y el precio en feria' : 'PRECIO CARO — compra solo con descuento claro';
-    const costoEsperaMes = t.crecAnualPct / 12; // % que sube el mercado por mes de espera
-    let texto = CAT_NOMBRES[ci] + ' a $' + t.nivel.toFixed(3) + '/lb (' + MN[t.nivelYm.slice(5, 7) * 1] + ') — ' + nivelTxt + ' de $' + t.valor.toFixed(3) + '. ';
-    texto += 'El mercado ' + (t.crecAnualPct >= 0 ? 'sube' : 'baja') + ' ~' + Math.abs(t.crecAnualPct).toFixed(0) + '%/año (' + (costoEsperaMes >= 0 ? '+' : '') + costoEsperaMes.toFixed(1) + '%/mes de espera). ';
-    if (conf && seas != null) texto += MN[mes] + ' suele estar ' + (seas < 0 ? seas.toFixed(1) + '% más barato' : '+' + seas.toFixed(1) + '% más caro') + ' (' + Math.round(es.consistencia[mes] * 100) + '% de los años). ';
-    else texto += MN[mes] + ' no tiene un patrón estacional confiable. ';
-    if (proximosBaratos.length) texto += 'Meses con descuento confiable: ' + proximosBaratos.map(p => MN[p.mes] + ' (' + p.pct.toFixed(1) + '%)').join(', ') + '.';
-    return { key, icon, titulo, texto, desvioPct: d, nivel: t.nivel, tendencia: t.valor, crecAnualPct: t.crecAnualPct, seasPct: seas, seasConf: conf, proximosBaratos, mes };
+  // Precio normal para un mes: tendencia de hoy × estacionalidad del mes (solo si es confiable)
+  function normalMes(ci, mes) {
+    const t = tendencia(ci); if (!t) return null;
+    const es = estacionalidad(ci);
+    mes = mes || (new Date().getMonth() + 1);
+    const conf = es ? es.confiable[mes] : false;
+    const seas = (es && conf && es.seasAvg[mes] != null) ? es.seasAvg[mes] : 0;
+    return { valor: t.valor * (1 + seas / 100), seasPct: seas, conf, mes };
   }
-  // Señal de VENTA
+  // Rendimiento anual de TU parte comprando hoy a un precio dado; elige el mejor mes de venta (desde el 3.er mes hasta el horizonte)
+  function rendimientoCompra(ci, pp, precio) {
+    const s = simular({ ci, capital: pp.pesoLb * precio * 10, pesoLb: pp.pesoLb, precioCompra: precio, gastosPct: pp.gastosPct, gananciaKgDia: pp.kgDia, meses: pp.meses || 8, compartido: pp.compartido });
+    if (!s || !s.filas.length) return null;
+    let best = null;
+    s.filas.filter(f => f.k >= 3).forEach(f => {
+      const parte = pp.compartido ? f.utilidad / 2 : f.utilidad;
+      const anual = parte / s.invertido * 100 * 365 / f.dias;
+      if (!best || anual > best.anual) best = { anual, fila: f, parteCab: parte / s.cabezas, periodoPct: parte / s.invertido * 100 };
+    });
+    return best;
+  }
+  // Precio de compra con el que tu parte rinde exactamente 'tasa' %/año
+  function precioParaRendimiento(ci, pp, tasa, ref) {
+    let lo = ref * 0.3, hi = ref * 3;
+    const r = p => { const x = rendimientoCompra(ci, pp, p); return x ? x.anual : -999; };
+    if (r(hi) >= tasa) return hi; if (r(lo) < tasa) return null;
+    for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (r(m) >= tasa) lo = m; else hi = m; }
+    return lo;
+  }
+  // ¿COMPRO HOY? Junta dos preguntas en un solo veredicto:
+  //  1) ¿el negocio rinde? (tu parte vs plazo fijo CPN y vs tu referencia)  2) ¿el precio es bueno? (vs lo normal de este mes)
+  function senalCompra(ci, opts) {
+    const t = tendencia(ci); if (!t) return null;
+    const pp = Object.assign(mktParamsCompra(ci), opts || {});
+    const mes = new Date().getMonth() + 1;
+    const nm = normalMes(ci, mes);
+    const precio = pp.precio || t.nivel;
+    const rc = rendimientoCompra(ci, pp, precio); if (!rc) return null;
+    const objetivo = nm.valor;
+    const dN = (precio / objetivo - 1) * 100;
+    const maxCPN = precioParaRendimiento(ci, pp, TASA_CPN, t.nivel);
+    const maxRef = precioParaRendimiento(ci, pp, pp.rendRef, t.nivel);
+    let key, titulo;
+    if (rc.anual < TASA_CPN) { key = 'err'; titulo = 'NO COMPRES A ESTE PRECIO'; }
+    else if (rc.anual >= pp.rendRef && dN <= 2) { key = 'ok'; titulo = 'COMPRA — buen precio y rinde'; }
+    else if (dN > 2) { key = 'warn'; titulo = 'COMPRA NEGOCIANDO — hasta $' + objetivo.toFixed(3) + '/lb'; }
+    else { key = 'warn'; titulo = 'COMPRA CON CUIDADO — rinde menos que tu referencia'; }
+    const f = rc.fila;
+    const precioTxt = (pp.precio ? 'A $' : 'Hoy $') + precio.toFixed(3) + '/lb: ' + (Math.abs(dN) < 1 ? 'en lo normal de ' + MN[mes] : (dN > 0 ? '+' : '') + dN.toFixed(1) + '% ' + (dN > 0 ? 'sobre' : 'bajo') + ' lo normal de ' + MN[mes]) + ' ($' + objetivo.toFixed(3) + '). ';
+    const rendTxt = 'Vendiendo en ' + f.label + ', tu parte rinde ~' + rc.anual.toFixed(0) + '%/año (' + fm(rc.parteCab) + ' por cabeza; referencia ' + pp.rendRef + '%, plazo fijo ' + TASA_CPN + '%). ';
+    const topeTxt = key === 'err' ? (maxCPN ? 'Para superar el plazo fijo tendrías que pagar menos de $' + maxCPN.toFixed(3) + '/lb.' : '') : (maxRef ? 'Sobre $' + maxRef.toFixed(3) + '/lb rinde menos que tu referencia.' : '');
+    const icon = key === 'ok' ? '🟢' : key === 'warn' ? '🟡' : '🔴';
+    return { key, icon, titulo, texto: precioTxt + rendTxt + topeTxt, supuestos: pp, nivel: precio, normal: objetivo, desvioPct: dN, precioObjetivo: objetivo, precioMaxCPN: maxCPN, precioMaxRef: maxRef, rendAnual: rc.anual, parteCab: rc.parteCab, mesVentaLabel: f.label, mesVenta: f.mes || null, fila: f, mes, crecAnualPct: t.crecAnualPct, tendencia: t.valor };
+  }
+  // ¿VENDO HOY? Precio de hoy vs lo normal del mes, y si algún mes próximo paga claramente más
   function senalVenta(ci) {
-    const t = tendencia(ci); const es = estacionalidad(ci);
-    if (!t) return null;
+    const t = tendencia(ci); if (!t) return null;
     const mes = new Date().getMonth() + 1;
-    const seas = es ? es.seasAvg[mes] : null, conf = es ? es.confiable[mes] : false;
-    const d = t.desvioPct;
-    let key = d >= UMBRAL_SENAL_PCT ? 'ok' : d <= -UMBRAL_SENAL_PCT ? 'err' : 'warn';
-    if (conf && seas > 0 && key === 'warn') key = 'ok';
-    if (conf && seas < 0 && key === 'warn') key = 'err';
-    const proximosCaros = es ? es.mejoresVenta.map(m => ({ mes: m, pct: es.seasAvg[m], en: ((m - mes + 12) % 12) })).sort((a, b2) => a.en - b2.en) : [];
+    const nm = normalMes(ci, mes);
+    const dN = (t.nivel / nm.valor - 1) * 100;
+    const rd = ruido(ci);
+    let mejor = null;
+    for (let k = 1; k <= 6; k++) { const p = proyeccion(ci, k); if (p && (!mejor || p.precio > mejor.precio)) mejor = { ...p, k }; }
+    const subeFut = mejor ? (mejor.precio / t.nivel - 1) * 100 : 0;
+    let key, titulo;
+    if (dN >= UMBRAL_SENAL_PCT) { key = 'ok'; titulo = 'VENDE — precio sobre lo normal'; }
+    else if (dN <= -UMBRAL_SENAL_PCT) { key = 'err'; titulo = 'PRECIO BAJO — espera si puedes'; }
+    else if (mejor && subeFut > rd) { key = 'warn'; titulo = 'ESPERA A ' + mejor.label.toUpperCase() + ' si el animal sigue ganando peso'; }
+    else { key = 'warn'; titulo = 'VENTA NORMAL — vende cuando el animal esté listo'; }
+    let texto = 'Hoy $' + t.nivel.toFixed(3) + '/lb: ' + (Math.abs(dN) < 1 ? 'en lo normal de ' + MN[mes] : (dN > 0 ? '+' : '') + dN.toFixed(1) + '% ' + (dN > 0 ? 'sobre' : 'bajo') + ' lo normal de ' + MN[mes]) + ' ($' + nm.valor.toFixed(3) + '). ';
+    if (mejor && subeFut > rd) texto += 'Mes próximo más alto: ' + mejor.label + ' (~$' + mejor.precio.toFixed(3) + '). ';
+    texto += 'No aceptes menos de $' + nm.valor.toFixed(3) + '/lb.';
     const icon = key === 'ok' ? '🟢' : key === 'warn' ? '🟡' : '🔴';
-    const titulo = key === 'ok' ? 'BUEN MOMENTO PARA VENDER' : key === 'warn' ? 'VENTA NEUTRA — vende si el animal está listo' : 'PRECIO BAJO — espera si puedes';
-    let texto = CAT_NOMBRES[ci] + ' a $' + t.nivel.toFixed(3) + '/lb está ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '% respecto a su tendencia ($' + t.valor.toFixed(3) + '). ';
-    if (conf && seas != null) texto += MN[mes] + ' suele estar ' + (seas > 0 ? '+' + seas.toFixed(1) + '% más caro' : seas.toFixed(1) + '% más barato') + ' (' + Math.round(es.consistencia[mes] * 100) + '% de los años). ';
-    else texto += MN[mes] + ' no tiene un patrón estacional confiable. ';
-    if (proximosCaros.length) texto += 'Meses con sobreprecio confiable: ' + proximosCaros.map(p => MN[p.mes] + ' (+' + p.pct.toFixed(1) + '%)').join(', ') + '.';
-    return { key, icon, titulo, texto, desvioPct: d, nivel: t.nivel, tendencia: t.valor, crecAnualPct: t.crecAnualPct, seasPct: seas, seasConf: conf, proximosCaros, mes };
-  }
-  // Prueba histórica: comprar en mesC (promedio del mes) y vender en mesV siguiente. Solo precio (sin peso).
-  function backtest(ci, mesC, mesV) {
-    const ms = mensual(ci); const map = {}; ms.forEach(x => map[x.ym] = x.v);
-    const anios = [...new Set(ms.map(x => x.anio))];
-    const filas = [];
-    anios.forEach(a => {
-      const ymC = a + '-' + String(mesC).padStart(2, '0');
-      const aV = mesV > mesC ? a : a + 1;
-      const ymV = aV + '-' + String(mesV).padStart(2, '0');
-      if (map[ymC] == null || map[ymV] == null) return;
-      const meses = mesesEntre(ymC, ymV);
-      const pct = (map[ymV] / map[ymC] - 1) * 100;
-      filas.push({ anio: a, ymC, ymV, pC: map[ymC], pV: map[ymV], meses, pct, anualPct: meses ? pct * 12 / meses : null });
-    });
-    if (!filas.length) return null;
-    const prom = filas.reduce((s, f) => s + f.pct, 0) / filas.length;
-    const promAnual = filas.reduce((s, f) => s + (f.anualPct || 0), 0) / filas.length;
-    const positivos = filas.filter(f => f.pct > 0).length;
-    return { mesC, mesV, filas, prom, promAnual, positivos, n: filas.length, mejor: Math.max(...filas.map(f => f.pct)), peor: Math.min(...filas.map(f => f.pct)) };
-  }
-  // Mejor pareja compra→venta por prueba histórica (horizonte 2–10 meses, mínimo 3 años)
-  function mejorParBacktest(ci) {
-    return memo('mejorpar' + ci, () => {
-      let best = null;
-      for (let mc = 1; mc <= 12; mc++) for (let h = 2; h <= 10; h++) {
-        const mv = ((mc - 1 + h) % 12) + 1;
-        const bt = backtest(ci, mc, mv); if (!bt || bt.n < 3) continue;
-        const score = bt.promAnual - (bt.n - bt.positivos) * 3; // penaliza años con pérdida
-        if (!best || score > best.score) best = { ...bt, score };
-      }
-      return best;
-    });
+    const es = estacionalidad(ci);
+    const proximosCaros = es ? es.mejoresVenta.map(m => ({ mes: m, pct: es.seasAvg[m], en: ((m - mes + 12) % 12) })).sort((a, b2) => a.en - b2.en) : [];
+    return { key, icon, titulo, texto, desvioPct: dN, nivel: t.nivel, normal: nm.valor, precioMin: nm.valor, mejorMes: (mejor && subeFut > rd) ? mejor : null, tendencia: t.valor, crecAnualPct: t.crecAnualPct, proximosCaros, mes };
   }
   // Simulador de inversión: capital → cabezas → proyección mes a mes (precio + peso) vs CPN
   function simular(p) {
@@ -1949,14 +1944,58 @@ const MKT = (() => {
       const roi = utilidad / invertido * 100;
       const roiAnual = roi * 365 / dias;
       const cpn = TASA_CPN * dias / 365;
-      filas.push({ k, label: pr.label, fecha, dias, precio: pr.precio, seasPct: pr.seasPct, usaSeas: pr.usaSeas, pesoLb, ingreso, utilidad, tuParte: p.compartido ? utilidad / 2 : utilidad, roi, roiAnual, cpn, cpnUsd: invertido * cpn / 100, superaCpn: roi > cpn, ventajaVsCpn: roi - cpn });
+      filas.push({ k, mes: pr.mes, label: pr.label, fecha, dias, precio: pr.precio, seasPct: pr.seasPct, usaSeas: pr.usaSeas, pesoLb, ingreso, utilidad, tuParte: p.compartido ? utilidad / 2 : utilidad, roi, roiAnual, cpn, cpnUsd: invertido * cpn / 100, superaCpn: roi > cpn, ventajaVsCpn: roi - cpn });
     }
     let mejor = null; filas.forEach(f => { if (!mejor || f.roiAnual > mejor.roiAnual) mejor = f; });
     return { cabezas, invertido, gastos, precioCompra: precioC, filas, mejor, tendencia: t };
   }
   function categoriasInteres() { const c = (typeof db !== 'undefined' && db.config && db.config.mktCats); return Array.isArray(c) && c.length ? c : [4]; }
-  return { MN, TASA_CPN, UMBRAL_SENAL_PCT, serie, mensual, mm12, nivel, ruido, tendencia, estacionalidad, cambioPatron, proyeccion, senalCompra, senalVenta, backtest, mejorParBacktest, simular, categoriasInteres, ymAdd, ymHoy };
+  return { MN, TASA_CPN, UMBRAL_SENAL_PCT, serie, mensual, mm12, nivel, ruido, tendencia, estacionalidad, cambioPatron, proyeccion, normalMes, senalCompra, senalVenta, simular, categoriasInteres, ymAdd, ymHoy };
 })();
+
+// ── Supuestos de compra comunes a toda la app (tarjetas, banner, lotes y simulador) ──
+const SIM_PESO_DEF = { 0: 500, 1: 1100, 2: 900, 3: 650, 4: 800, 5: 220 };   // lb por cabeza, típico de feria
+const SIM_GANANCIA_DEF = { 0:0.5, 1:0.3, 2:0.6, 3:0.5, 4:0.4, 5:0.4 };       // kg/día si aún no hay lotes cerrados con pesos
+const REND_REF_DEF = 15;                                                     // %/año de tu parte — referencia, editable
+// Lee "10.210 lb" o "1115 lb" al final de la descripción de una venta parcial
+function _lbDeTexto(txt) {
+  const m = String(txt || '').match(/([\d.,]+)\s*lb\s*$/i); if (!m) return null;
+  let n = m[1];
+  if (/^\d{1,3}(\.\d{3})+$/.test(n)) n = n.replace(/\./g, ''); else n = n.replace(/,/g, '.');
+  const v = parseFloat(n); return v > 0 ? v : null;
+}
+// Ganancia de peso real de tus lotes cerrados: peso de compra por cabeza vs peso de venta por cabeza
+function gdpLotesCerrados() {
+  let suma = 0, pesoTot = 0, cab = 0; const lotes = new Set();
+  (db.lotes || []).filter(loteCerrado).forEach(l => {
+    (l.items || []).forEach((it, idx) => {
+      const p0 = parseFloat(it.pesoLb), f0 = it.fechaCompra || l.fechaCompra; if (!(p0 > 0) || !f0) return;
+      (l.ventasParciales || []).filter(v => v.itemIdx === idx && v.cantidad > 0).forEach(v => {
+        const lb = _lbDeTexto(v.desc); if (!lb) return;
+        const dias = (parseFechaLocal(v.fecha) - parseFechaLocal(f0)) / 86400000; if (dias < 30) return;
+        const g = (lb / v.cantidad - p0) / 2.205 / dias; if (!(g > 0 && g < 1.5)) return;
+        const w = v.cantidad * dias; suma += g * w; pesoTot += w; cab += v.cantidad; lotes.add(l.id);
+      });
+    });
+  });
+  return pesoTot ? { kgDia: Math.round(suma / pesoTot * 100) / 100, cabezas: cab, lotes: lotes.size } : null;
+}
+// Rendimiento anual real de tu parte en lotes liquidados
+function rendRealLotes() {
+  let suma = 0, w = 0, n = 0;
+  (db.lotes || []).filter(l => l.liquidacion && l.fechaCompra && (l.fechaLiquidacion || l.fechaVenta)).forEach(l => {
+    const cap = getDesgloseCostoLote(l).capitalLM; if (!(cap > 0)) return;
+    const dias = (parseFechaLocal(l.fechaLiquidacion || l.fechaVenta) - parseFechaLocal(l.fechaCompra)) / 86400000; if (dias < 30) return;
+    const anual = (l.liquidacion.recibeLM - cap) / cap * 100 * 365 / dias;
+    suma += anual * cap; w += cap; n++;
+  });
+  return w ? { anual: suma / w, lotes: n } : null;
+}
+function rendReferencia() { const v = parseFloat(db.config && db.config.rendRef); return v > 0 ? v : REND_REF_DEF; }
+function mktParamsCompra(ci) {
+  const g = gdpLotesCerrados();
+  return { meses: 8, pesoLb: SIM_PESO_DEF[ci] || 500, gastosPct: 5, kgDia: g ? g.kgDia : (SIM_GANANCIA_DEF[ci] ?? 0.4), compartido: true, rendRef: rendReferencia(), precio: null };
+}
 
 // ── Banner de mercado (Visitas y Lotes): señal de compra/venta por categoría de interés, desde MKT
 const MKT_CAT_EMOJI = ['🐂','🐃','🥩','🐄','🐮','🐷'];
@@ -1974,21 +2013,22 @@ function renderMercadoBanner() {
     const sc = MKT.senalCompra(ci), sv = MKT.senalVenta(ci), t = MKT.tendencia(ci);
     if (!sc || !sv || !t) return '<div style="font-size:11px;color:var(--tx3);">' + CAT_NOMBRES[ci] + ': sin datos suficientes.</div>';
     const fechaUlt = t.ultimoBoletin ? fd(t.ultimoBoletin) : '';
-    const barato = sc.proximosBaratos.length ? sc.proximosBaratos.map(x => MKT.MN[x.mes] + ' ' + x.pct.toFixed(1) + '%').join(' · ') : 'ninguno confiable';
-    const caro = sv.proximosCaros.length ? sv.proximosCaros.map(x => MKT.MN[x.mes] + ' +' + x.pct.toFixed(1) + '%').join(' · ') : 'ninguno confiable';
+    const maxB = sc.key === 'err' ? sc.precioMaxCPN : sc.precioMaxRef;
+    const lineaC = 'Objetivo $' + sc.precioObjetivo.toFixed(3) + (maxB ? ' · máx. $' + maxB.toFixed(3) : '') + ' · rinde ~' + sc.rendAnual.toFixed(0) + '%/año';
+    const lineaV = 'No menos de $' + sv.precioMin.toFixed(3) + (sv.mejorMes ? ' · mejor ' + sv.mejorMes.label : '');
     return '<div style="border:1.5px solid var(--crema3);border-radius:11px;padding:9px 11px;margin-bottom:8px;background:var(--card);">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">'
         + '<div style="font-weight:800;font-size:13px;color:var(--tierra2);">' + MKT_CAT_EMOJI[ci] + ' ' + CAT_NOMBRES[ci] + ' <span style="font-size:12px;color:var(--tx);">$' + t.nivel.toFixed(3) + '/lb</span> <span style="font-size:9px;color:var(--tx3);">' + fechaUlt + '</span></div>'
         + '<button class="btn btn-tierra btn-sm" onclick="mktIrSimulador(' + ci + ')">💰 Simular inversión</button>'
       + '</div>'
-      + '<div style="font-size:10px;color:var(--tx3);margin:3px 0 6px;">Tendencia $' + t.valor.toFixed(3) + ' · desvío <strong style="color:' + (Math.abs(t.desvioPct) < MKT.UMBRAL_SENAL_PCT ? 'var(--tx2)' : t.desvioPct > 0 ? 'var(--rojo)' : 'var(--pasto)') + ';">' + (t.desvioPct >= 0 ? '+' : '') + t.desvioPct.toFixed(1) + '%</strong> · mercado ' + (t.crecAnualPct >= 0 ? 'sube' : 'baja') + ' ' + Math.abs(t.crecAnualPct).toFixed(0) + '%/año</div>'
+      + '<div style="font-size:10px;color:var(--tx3);margin:3px 0 6px;">Normal de ' + MKT.MN[sc.mes] + ' $' + sc.normal.toFixed(3) + ' · hoy <strong style="color:' + (Math.abs(sc.desvioPct) < MKT.UMBRAL_SENAL_PCT ? 'var(--tx2)' : sc.desvioPct > 0 ? 'var(--rojo)' : 'var(--pasto)') + ';">' + (sc.desvioPct >= 0 ? '+' : '') + sc.desvioPct.toFixed(1) + '%</strong> · mercado ' + (t.crecAnualPct >= 0 ? 'sube' : 'baja') + ' ' + Math.abs(t.crecAnualPct).toFixed(0) + '%/año</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">'
-        + '<div style="background:' + bgKey(sc.key) + ';border-left:3px solid ' + colorKey(sc.key) + ';border-radius:7px;padding:6px 8px;"><div style="font-size:10px;font-weight:800;color:' + colorKey(sc.key) + ';">' + sc.icon + ' COMPRAR</div><div style="font-size:10px;color:var(--tx2);line-height:1.4;">' + sc.titulo + '<br>Meses baratos: ' + barato + '</div></div>'
-        + '<div style="background:' + bgKey(sv.key) + ';border-left:3px solid ' + colorKey(sv.key) + ';border-radius:7px;padding:6px 8px;"><div style="font-size:10px;font-weight:800;color:' + colorKey(sv.key) + ';">' + sv.icon + ' VENDER</div><div style="font-size:10px;color:var(--tx2);line-height:1.4;">' + sv.titulo + '<br>Meses caros: ' + caro + '</div></div>'
+        + '<div style="background:' + bgKey(sc.key) + ';border-left:3px solid ' + colorKey(sc.key) + ';border-radius:7px;padding:6px 8px;"><div style="font-size:10px;font-weight:800;color:' + colorKey(sc.key) + ';">' + sc.icon + ' ¿COMPRO?</div><div style="font-size:10px;color:var(--tx2);line-height:1.4;">' + sc.titulo + '<br><span style="color:var(--tx3);">' + lineaC + '</span></div></div>'
+        + '<div style="background:' + bgKey(sv.key) + ';border-left:3px solid ' + colorKey(sv.key) + ';border-radius:7px;padding:6px 8px;"><div style="font-size:10px;font-weight:800;color:' + colorKey(sv.key) + ';">' + sv.icon + ' ¿VENDO?</div><div style="font-size:10px;color:var(--tx2);line-height:1.4;">' + sv.titulo + '<br><span style="color:var(--tx3);">' + lineaV + '</span></div></div>'
       + '</div></div>';
   }).join('');
   const html = '<div style="background:rgba(139,90,43,.04);border:1px solid var(--crema3);border-radius:12px;padding:10px 12px;margin-bottom:12px;">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:6px;"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--tierra2);">📈 Mercado ASOGAN — señal de hoy</span><span style="font-size:9px;color:var(--tx3);">Precio vs tendencia 12m + estacionalidad confiable</span></div>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:6px;"><span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--tierra2);">📈 Mercado ASOGAN — señal de hoy</span><span style="font-size:9px;color:var(--tx3);">Precio vs lo normal del mes + rendimiento de tu parte</span></div>'
     + '<div style="margin-bottom:8px;">' + chips + '</div>' + tarjetas + '</div>';
   conts.forEach(c => c.innerHTML = html);
 }
@@ -2564,7 +2604,7 @@ function renderAnimales() {
       const labelT = diasT < 0 ? `¡Atrasado ${Math.abs(diasT)}d!` : diasT === 0 ? 'HOY' : `en ${diasT} días`;
       tratCell = `<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(139,90,43,.2);cursor:pointer;" onclick="abrirModalVacunas(${a.id},'trat')"><div style="font-size:11px;font-weight:700;color:${colorT};">🩺 ${proxTrat.nombre}</div><div style="font-size:10px;color:${colorT};">${labelT}</div><div style="font-size:9px;color:var(--tx3);">Toca para ver tratamiento</div></div>`;
     }
-    return `<tr style="cursor:${tienePanel?'pointer':'default'};" onclick="${tienePanel?'toggleReproPanel(event,'+a.id+')':''}">
+    return `<tr>
       <td>
         <strong style="color:var(--tierra2);">${a.nombre}</strong>
         ${edad?`<div style="font-size:10px;color:var(--tx3);">${edad}</div>`:''}
@@ -2590,19 +2630,6 @@ function renderAnimales() {
           }
           return html;
         })()}
-        ${(()=>{
-          const fnacAnimal = a.fnac ? new Date(a.fnac + 'T00:00:00') : null;
-          const ultimaVisita = db.visitas.filter(v=>{
-            if(fnacAnimal && new Date(v.fecha + 'T00:00:00') < fnacAnimal) return false;
-            if(v.animal==='todos'||v.animal==='ambos') return true;
-            return String(v.animal)===String(a.id)||v.animal===a.nombre.toLowerCase();
-          }).sort((x,y)=>parseFechaLocal(y.fecha)-parseFechaLocal(x.fecha))[0];
-          if(!ultimaVisita) return '<div style="font-size:9px;color:var(--rojo);">Sin visitas</div>';
-          const d=diasHasta(ultimaVisita.fecha);
-          const diasAtras=Math.abs(d);
-          const col=diasAtras>14?'var(--rojo)':diasAtras>7?'var(--sol)':'var(--tx3)';
-          return diasAtras>0?`<div style="font-size:9px;color:${col};">Última visita: hace ${diasAtras}d</div>`:'<div style="font-size:9px;color:var(--pasto);">Visitado hoy</div>';
-        })()}
         ${(a.gastos&&a.gastos.length)?`<div style="font-size:9px;color:var(--tx3);">${a.gastos.length} egreso(s)</div>`:''}
       </td>
       <td>${a.tipo||'—'}<div style="font-size:10px;color:var(--tx3);">${a.raza||''}</div></td>
@@ -2615,21 +2642,25 @@ function renderAnimales() {
         <button class="btn btn-ghost btn-xs" onclick="openAnimalModal(${a.id})" style="margin-right:2px;">✏️</button>
         ${a.estado!=='vendido'?`<button class="btn btn-verde btn-xs" onclick="registrarVentaAnimal(${a.id})" style="margin-right:2px;" title="Registrar venta">💰</button>`:'<span style="font-size:10px;font-weight:700;color:var(--tierra);background:rgba(92,61,30,.12);padding:2px 7px;border-radius:10px;">Vendido</span>'}
         <button class="btn btn-red btn-xs" onclick="borrarAnimal(${a.id})">🗑️</button>
+        ${tienePanel?`<button class="btn btn-ghost btn-xs repro-flecha" id="repro-flecha-${sanitizeAnimalId(a.id)}" onclick="toggleReproPanel(event,${a.id})" title="Ver seguimiento reproductivo" style="margin-left:2px;min-width:28px;">▼</button>`:''}
       </td>
     </tr>
-    ${tienePanel ? '<tr id="repro-panel-'+sanitizeAnimalId(a.id)+'" style="display:none;"><td colspan="6" style="padding:0;background:'+(esHembra?'rgba(245,240,232,.8)':'rgba(232,240,245,.8)')+';border-bottom:2px solid rgba(139,90,43,.15);"><div style="padding:14px 18px;"><div style="font-size:11px;font-weight:800;color:var(--tierra2);margin-bottom:10px;">'+(esHembra?'🐄 SEGUIMIENTO REPRODUCTIVO':'🐂 SEGUIMIENTO REPRODUCTIVO')+' · '+a.nombre+'</div><div id="rp-fields-'+sanitizeAnimalId(a.id)+'"></div><div id="rp-timeline-'+sanitizeAnimalId(a.id)+'"></div><div id="rp-san-alerta-'+sanitizeAnimalId(a.id)+'"></div></div></td></tr>' : ''}`;
+    ${tienePanel ? '<tr id="repro-panel-'+sanitizeAnimalId(a.id)+'" style="display:none;"><td colspan="7" style="padding:0;background:'+(esHembra?'rgba(245,240,232,.8)':'rgba(232,240,245,.8)')+';border-bottom:2px solid rgba(139,90,43,.15);"><div style="padding:14px 18px;"><div style="font-size:11px;font-weight:800;color:var(--tierra2);margin-bottom:10px;">'+(esHembra?'🐄 SEGUIMIENTO REPRODUCTIVO':'🐂 SEGUIMIENTO REPRODUCTIVO')+' · '+a.nombre+'</div><div id="rp-fields-'+sanitizeAnimalId(a.id)+'"></div><div id="rp-timeline-'+sanitizeAnimalId(a.id)+'"></div><div id="rp-san-alerta-'+sanitizeAnimalId(a.id)+'"></div></div></td></tr>' : ''}`;
   }).join('');
   renderAlertaSanidad();
 }
 
 function toggleReproPanel(e, animalId) {
-  if (e.target.closest('button') || e.target.closest('select') || e.target.closest('input')) return;
+  // Solo se abre con la flecha ▼ al final de la fila (un toque en la fila ya no lo despliega)
+  if (e) e.stopPropagation();
   const panel = document.getElementById('repro-panel-' + sanitizeAnimalId(animalId));
   if (!panel) return;
   const visible = panel.style.display !== 'none';
   document.querySelectorAll('[id^="repro-panel-"]').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.repro-flecha').forEach(b => b.textContent = '▼');
   if (!visible) {
     panel.style.display = '';
+    const fl = document.getElementById('repro-flecha-' + sanitizeAnimalId(animalId)); if (fl) fl.textContent = '▲';
     const a = db.animales.find(x => String(x.id) === String(animalId));
     const esMachoRepro = a && (a.sexo === 'macho' || (!a.sexo && ['toro','torete'].includes(a.tipo)));
     if (esMachoRepro) {
@@ -3887,7 +3918,7 @@ function generarAnalisisLote(loteId) {
     if (svMKT) {
       sColor = svMKT.key==='ok'?'var(--pasto)':svMKT.key==='warn'?'var(--sol)':'var(--rojo)';
       sIcon = svMKT.icon; sBanner = (svMKT.key==='ok'?'✅ ':svMKT.key==='warn'?'⚠️ ':'❌ ') + 'PARA VENDER — ' + svMKT.titulo;
-      sTexto = svMKT.texto + (svMKT.proximosCaros.length ? ' Mejor ventana: ' + mejorMesVentaAnio + '.' : '');
+      sTexto = svMKT.texto;
     } else {
       sColor='var(--sol)';sIcon='🟡';sBanner='⚠️ PARA VENDER — Sin datos suficientes';sTexto='Faltan boletines para evaluar ' + CAT_NOMBRES[ci] + '.';
     }
@@ -4094,7 +4125,7 @@ function generarAnalisisLote(loteId) {
       +simHtml
       +mesesHtml;
 
-    return { semaforoHtml, analisisHtml, senal: { catNom:CAT_NOMBRES[ci]||it.tipo, sIcon, sBanner, sTexto, sColorKey:sColor==='var(--pasto)'?'ok':sColor==='var(--sol)'?'warn':'err', posVenta, mejorMesAnio:mejorMesVentaAnio, mesesFuertes:rankingVenta.filter(r=>r.resid>0).slice(0,3).map(r=>MN[r.mes]), mesLabel:MN[mesActual]+' '+anioActual } };
+    return { semaforoHtml, analisisHtml, senal: { catNom:CAT_NOMBRES[ci]||it.tipo, sIcon, sBanner, sTexto, sColorKey:sColor==='var(--pasto)'?'ok':sColor==='var(--sol)'?'warn':'err', posVenta, mejorMesAnio:(svMKT&&svMKT.mejorMes)?svMKT.mejorMes.label:'Ahora, si el animal está listo', mesesFuertes:[], precioMin:svMKT?svMKT.precioMin:null, mesLabel:MN[mesActual]+' '+anioActual } };
   }
 
   // ── Tabla resumen multi-ítem ──
@@ -4175,8 +4206,7 @@ function generarAnalisisLote(loteId) {
   const ci0 = getCatIndex(items[0].tipo);
   const scMKT = MKT.senalCompra(ci0);
   const cats=[{nombre:'Vaca',ci:4},{nombre:'Torete',ci:0},{nombre:'Toro',ci:1},{nombre:'Vacona',ci:3}];
-  const rankingCompra=cats.map(c=>{ const s=MKT.senalCompra(c.ci); return {...c, senal:s, precioActual:s?s.nivel:null, desvioPct:s?s.desvioPct:null, mejorMes:(s&&s.proximosBaratos.length)?s.proximosBaratos[0].mes:null}; }).filter(c=>c.senal);
-  const mejorMesCompraAnio0=(()=>{ if(!scMKT||!scMKT.proximosBaratos.length) return 'sin mes confiable'; const m=scMKT.proximosBaratos[0].mes; const off=((m-mesActual+12)%12); const f=new Date(anioActual,mesActual-1+off,1); return MN[f.getMonth()+1]+' '+f.getFullYear(); })();
+  const rankingCompra=cats.map(c=>{ const s=MKT.senalCompra(c.ci); return {...c, senal:s, precioActual:s?s.nivel:null, desvioPct:s?s.desvioPct:null}; }).filter(c=>c.senal);
   const cambioP = MKT.cambioPatron(ci0);
   let cColor,cIcon,cBanner,cTexto;
   if(scMKT){
@@ -4193,19 +4223,19 @@ function generarAnalisisLote(loteId) {
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:${cColor};margin-bottom:4px;">${cIcon} ${cBanner}</div>
       <div style="font-size:11px;color:var(--tx2);line-height:1.5;">${cTexto}</div>
     </div>
-    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tierra);margin-bottom:4px;">💡 Categorías más baratas hoy respecto a su propia tendencia</div>
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tierra);margin-bottom:4px;">💡 Categorías más baratas hoy respecto a lo normal del mes</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
       ${recoCompra.map((c,i)=>`<div style="background:${i===0?'rgba(74,124,63,.08)':'rgba(212,160,23,.06)'};border:1px solid ${i===0?'rgba(74,124,63,.3)':'rgba(212,160,23,.25)'};border-radius:10px;padding:11px;">
         <div style="font-size:10px;font-weight:800;text-transform:uppercase;color:${i===0?'var(--pasto)':'var(--sol)'};margin-bottom:4px;">${i===0?'⭐ Primera opción':'2️⃣ Segunda opción'} — ${c.nombre} ${c.senal.icon}</div>
-        <div style="font-size:11px;color:var(--tx2);line-height:1.6;">Precio actual: <strong>$${c.precioActual.toFixed(3)}/lb</strong> (${c.desvioPct>=0?'+':''}${c.desvioPct.toFixed(1)}% vs tendencia)<br>Mes barato confiable: <strong>${c.mejorMes?MN[c.mejorMes]:'ninguno'}</strong></div>
+        <div style="font-size:11px;color:var(--tx2);line-height:1.6;">Hoy <strong>$${c.precioActual.toFixed(3)}/lb</strong> (${c.desvioPct>=0?'+':''}${c.desvioPct.toFixed(1)}% vs lo normal)<br>Objetivo <strong>$${c.senal.precioObjetivo.toFixed(3)}</strong> · rinde ~${c.senal.rendAnual.toFixed(0)}%/año</div>
       </div>`).join('')}
     </div>
     <div style="text-align:right;"><button class="btn btn-tierra btn-sm" onclick="mktIrSimulador(${ci0})">💰 Simular reinversión con fechas y rendimiento</button></div>
   </div>`;
 
   panel.innerHTML = cabeceraPrincipal + resumenHtml + semaforesHtml + analisisDetalleHtml + compraHtml
-    + `<div style="font-size:10px;color:var(--tx3);font-style:italic;margin-top:6px;">💡 Proyección de precio: tendencia de 12 meses (promedio móvil + crecimiento anual) más estacionalidad solo cuando es confiable (✓). No es un precio garantizado.</div>`
-    + (cambioP ? `<div style="font-size:10px;color:${cambioP.cambio?'var(--rojo)':'var(--tx3)'};font-style:italic;margin-top:4px;">${cambioP.cambio?'⚠️ El patrón estacional de los últimos 30 meses NO coincide con el histórico completo — confía más en el precio vs tendencia que en el calendario.':'📊 El patrón estacional reciente (30 meses) coincide con el histórico completo (correlación '+Math.round(cambioP.corr*100)+'%). Próximo mes barato confiable: <strong>'+mejorMesCompraAnio0+'</strong>.'}</div>` : '');
+    + `<div style="font-size:10px;color:var(--tx3);font-style:italic;margin-top:6px;">💡 "Lo normal del mes" = tendencia de 12 meses × estacionalidad del mes cuando es confiable (✓). No es un precio garantizado.</div>`
+    + (cambioP ? `<div style="font-size:10px;color:${cambioP.cambio?'var(--rojo)':'var(--tx3)'};font-style:italic;margin-top:4px;">${cambioP.cambio?'⚠️ El patrón estacional de los últimos 30 meses NO coincide con el histórico completo — confía más en el precio vs tendencia que en el calendario.':'📊 El patrón estacional reciente (30 meses) coincide con el histórico completo (correlación '+Math.round(cambioP.corr*100)+'%).'}</div>` : '');
 
   // Cachear señal del ítem principal para sync Finanzas
   lote._senal = resultados[0].senal;
@@ -5429,11 +5459,8 @@ async function renderAnalisis() {
         ${usoFallbackProm ? notaFallback : ''}
       </div>
       <div class="stat-box">
-        <div class="stat-label">Precio vs tendencia 12m</div>
-        <div class="stat-val" style="font-size:18px;color:${tMKT?(Math.abs(tMKT.desvioPct)<MKT.UMBRAL_SENAL_PCT?'var(--tx2)':tMKT.desvioPct>0?'var(--rojo)':'var(--pasto)'):'var(--tx3)'};">
-          ${tMKT?(tMKT.desvioPct>=0?'▲ +':'▼ ')+Math.abs(tMKT.desvioPct).toFixed(1)+'%':'—'}
-        </div>
-        <div class="stat-sub" style="font-size:9px;line-height:1.4;">Tendencia hoy: <strong>$${tMKT?tMKT.valor.toFixed(3):'—'}</strong> (promedio móvil 12m $${tMKT?tMKT.mm12.toFixed(3):'—'} traído a hoy). ${tMKT&&Math.abs(tMKT.desvioPct)<MKT.UMBRAL_SENAL_PCT?'Dentro de lo normal: no es señal.':tMKT&&tMKT.desvioPct>0?'Caro para comprar, bueno para vender.':'Barato para comprar, malo para vender.'}</div>
+        <div class="stat-label">Precio vs normal de ${AN_MESES[mesHoy]}</div>
+        ${(()=>{ const nm=MKT.normalMes(catIdx); if(!nm||!tMKT) return '<div class="stat-val" style="font-size:18px;color:var(--tx3);">—</div>'; const d=(tMKT.nivel/nm.valor-1)*100; return `<div class="stat-val" style="font-size:18px;color:${Math.abs(d)<MKT.UMBRAL_SENAL_PCT?'var(--tx2)':d>0?'var(--rojo)':'var(--pasto)'};">${d>=0?'▲ +':'▼ '}${Math.abs(d).toFixed(1)}%</div><div class="stat-sub" style="font-size:9px;line-height:1.4;">Normal de ${AN_MESES[mesHoy]}: <strong>$${nm.valor.toFixed(3)}</strong> (tendencia $${tMKT.valor.toFixed(3)}${nm.conf?' '+(nm.seasPct>=0?'+':'')+nm.seasPct.toFixed(1)+'% estacional ✓':', sin efecto estacional confiable'}). Sobre lo normal: caro para comprar, bueno para vender.</div>`; })()}
       </div>
       <div class="stat-box">
         <div class="stat-label">Crecimiento anual</div>
@@ -5528,169 +5555,143 @@ async function renderAnalisis() {
     <div style="font-size:9px;color:var(--tx3);margin-top:8px;line-height:1.5;">Estac. = cuánto suele estar el precio sobre (+) o bajo (−) su tendencia de 12 meses en ese mes (${periodoLabel}). ✓ = patrón confiable: ≥3 años, ≥75% de los años en el mismo sentido y efecto mayor que el ruido semanal (±${esAn?esAn.ruido.toFixed(1):'—'}%). Los meses sin ✓ no se usan en proyecciones ni señales. Solo los ✓ cuentan como ventana real de compra o venta.</div>
   `;
 
-  // RECOMENDACIÓN — señales del motor MKT (histórico completo; no depende del período seleccionado)
-  const scAn = MKT.senalCompra(catIdx), svAn = MKT.senalVenta(catIdx);
-  const colKey = k => k==='ok'?'var(--pasto)':k==='warn'?'rgba(212,160,23,0.9)':'var(--rojo)';
-  const recoVentaColor = svAn?colKey(svAn.key):'var(--tx3)', recoVentaIcon = svAn?svAn.icon:'—';
-  const recoVentaTitulo = svAn?((svAn.key==='ok'?'✅ ':svAn.key==='warn'?'⚠️ ':'❌ ')+'PARA VENDER — '+svAn.titulo):'Sin datos';
-  const recoVentaTexto = svAn?svAn.texto:'';
-  const recoCompraColor = scAn?colKey(scAn.key):'var(--tx3)', recoCompraIcon = scAn?scAn.icon:'—';
-  const recoCompraTitulo = scAn?((scAn.key==='ok'?'✅ ':scAn.key==='warn'?'⚠️ ':'❌ ')+'PARA COMPRAR — '+scAn.titulo):'Sin datos';
-  const recoCompraTexto = scAn?scAn.texto:'';
-  const cambioAn = MKT.cambioPatron(catIdx);
+  renderRecoAnalisis(catIdx);
+  renderSimuladorPanel(catIdx);
+}
 
-  document.getElementById('an-recomendacion').innerHTML = `
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--crema3);">🎯 Recomendación · ${AN_MESES[mesActual]} ${hoyDate.getFullYear()} · ${AN_CATS[catIdx]}</div>
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:10px;">Combina el comportamiento histórico del mes con el nivel de precio actual respecto a la tendencia de largo plazo</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div style="background:${recoVentaColor==='var(--pasto)'?'rgba(74,124,63,.1)':recoVentaColor.includes('212')?'rgba(212,160,23,.1)':'rgba(192,57,43,.08)'};border:1.5px solid ${recoVentaColor};border-radius:12px;padding:12px 14px;">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:${recoVentaColor};margin-bottom:5px;">${recoVentaIcon} ${recoVentaTitulo}</div>
-        <div style="font-size:11px;color:var(--tx2);line-height:1.5;">${recoVentaTexto}</div>
+// ══════════════════════════════════════════════════════
+//  ¿COMPRO HOY? / ¿VENDO HOY? — una sola respuesta por categoría (motor MKT)
+// ══════════════════════════════════════════════════════
+function _simOpts(catIdx) {
+  if (_simVals.catIdx !== catIdx) return {};
+  return { meses: _simVals.meses, pesoLb: _simVals.pesoLb, gastosPct: _simVals.gastosPct, kgDia: _simVals.kgDia, compartido: _simVals.compartido, rendRef: rendReferencia() };
+}
+function renderRecoAnalisis(catIdx) {
+  const wrap = document.getElementById('an-recomendacion'); if (!wrap) return;
+  const sc = MKT.senalCompra(catIdx, _simOpts(catIdx)), sv = MKT.senalVenta(catIdx);
+  if (!sc || !sv) { wrap.innerHTML = '<div style="font-size:12px;color:var(--tx3);">Faltan boletines para evaluar ' + AN_CATS[catIdx] + '.</div>'; return; }
+  const col = k => k === 'ok' ? 'var(--pasto)' : k === 'warn' ? 'var(--sol)' : 'var(--rojo)';
+  const bg = k => k === 'ok' ? 'rgba(74,124,63,.1)' : k === 'warn' ? 'rgba(212,160,23,.1)' : 'rgba(192,57,43,.08)';
+  const caja = (lbl, val, sub, color) => `<div style="background:#fff;border:1px solid var(--crema3);border-radius:9px;padding:7px 9px;"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:var(--tx3);">${lbl}</div><div style="font-size:17px;font-weight:800;color:${color || 'var(--tx)'};">${val}</div><div style="font-size:9px;color:var(--tx3);line-height:1.3;">${sub}</div></div>`;
+  const mesN = AN_MESES[sc.mes];
+  const sup = sc.supuestos, g = gdpLotesCerrados(), rr = rendRealLotes();
+  wrap.innerHTML = `
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--crema3);">🎯 ${AN_CATS[catIdx]} · ${mesN} ${new Date().getFullYear()} — ¿qué hago hoy?</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;">
+      <div style="background:${bg(sc.key)};border:1.5px solid ${col(sc.key)};border-radius:12px;padding:11px 12px;">
+        <div style="font-size:12px;font-weight:800;color:${col(sc.key)};margin-bottom:8px;">${sc.icon} ¿COMPRO HOY? — ${sc.titulo}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
+          ${caja('Hoy', '$' + sc.nivel.toFixed(3), (sc.desvioPct >= 0 ? '+' : '') + sc.desvioPct.toFixed(1) + '% vs normal', Math.abs(sc.desvioPct) < 1 ? 'var(--tx)' : sc.desvioPct > 0 ? 'var(--rojo)' : 'var(--pasto)')}
+          ${caja('Objetivo', '$' + sc.precioObjetivo.toFixed(3), 'lo normal de ' + mesN, 'var(--pasto)')}
+          ${sc.key === 'err' ? caja('Máximo', sc.precioMaxCPN ? '$' + sc.precioMaxCPN.toFixed(3) : '—', 'para superar el plazo fijo', 'var(--rojo)') : caja('Máximo', sc.precioMaxRef ? '$' + sc.precioMaxRef.toFixed(3) : '—', 'sobre esto rinde menos que tu referencia', 'var(--rojo)')}
+        </div>
+        <div style="font-size:11px;color:var(--tx2);line-height:1.5;">Tu parte: <strong>~${sc.rendAnual.toFixed(0)}%/año</strong> (${fm(sc.parteCab)} por cabeza) vendiendo en <strong>${sc.mesVentaLabel}</strong> · referencia ${sup.rendRef}% · plazo fijo ${MKT.TASA_CPN}%.</div>
+        <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.4;">Supuestos: ${sup.pesoLb} lb por cabeza, ${sup.kgDia} kg/día, venta hasta ${sup.meses} meses${g && _simVals.catIdx !== catIdx ? ' (real de tus lotes cerrados)' : ''}, gastos ${sup.gastosPct}%${sup.compartido ? ', socio 50%' : ''}. Cámbialos en el simulador.${rr ? ' Tu resultado real: ' + rr.anual.toFixed(0) + '%/año (' + rr.lotes + ' lote' + (rr.lotes > 1 ? 's' : '') + ' liquidado' + (rr.lotes > 1 ? 's' : '') + ').' : ''}</div>
       </div>
-      <div style="background:${recoCompraColor==='var(--pasto)'?'rgba(74,124,63,.1)':recoCompraColor.includes('212')?'rgba(212,160,23,.1)':'rgba(192,57,43,.08)'};border:1.5px solid ${recoCompraColor};border-radius:12px;padding:12px 14px;">
-        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:${recoCompraColor};margin-bottom:5px;">${recoCompraIcon} ${recoCompraTitulo}</div>
-        <div style="font-size:11px;color:var(--tx2);line-height:1.5;">${recoCompraTexto}</div>
+      <div style="background:${bg(sv.key)};border:1.5px solid ${col(sv.key)};border-radius:12px;padding:11px 12px;">
+        <div style="font-size:12px;font-weight:800;color:${col(sv.key)};margin-bottom:8px;">${sv.icon} ¿VENDO HOY? — ${sv.titulo}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px;">
+          ${caja('Hoy', '$' + sv.nivel.toFixed(3), (sv.desvioPct >= 0 ? '+' : '') + sv.desvioPct.toFixed(1) + '% vs normal', Math.abs(sv.desvioPct) < 1 ? 'var(--tx)' : sv.desvioPct > 0 ? 'var(--pasto)' : 'var(--rojo)')}
+          ${caja('No menos de', '$' + sv.precioMin.toFixed(3), 'lo normal de ' + mesN, 'var(--tierra2)')}
+          ${caja('Mejor mes', sv.mejorMes ? sv.mejorMes.label : 'Ahora', sv.mejorMes ? '~$' + sv.mejorMes.precio.toFixed(3) + '/lb' : 'ningún mes próximo paga claramente más', 'var(--tx)')}
+        </div>
+        <div style="font-size:11px;color:var(--tx2);line-height:1.5;">${sv.texto}</div>
       </div>
     </div>
-    <div style="font-size:10px;color:var(--tx3);margin-top:8px;line-height:1.5;">Regla: verde/rojo cuando el precio está más de ${MKT.UMBRAL_SENAL_PCT}% bajo/sobre su tendencia de 12 meses; en zona neutra decide la estacionalidad solo si es confiable (✓). ${cambioAn?(cambioAn.cambio?'<span style="color:var(--rojo);">⚠️ El patrón estacional reciente (30 meses) no coincide con el histórico: confía en el precio, no en el calendario.</span>':'Patrón reciente coherente con el histórico (correlación '+Math.round(cambioAn.corr*100)+'%).'):''} Calculado con todo el histórico (${MKT.serie(catIdx).length} boletines).</div>
-  `;
-
-  renderBacktestPanel(catIdx);
-  renderSimuladorPanel(catIdx);
+    <div style="font-size:9px;color:var(--tx3);margin-top:8px;line-height:1.5;">"Lo normal del mes" = tendencia de 12 meses (${sc.crecAnualPct >= 0 ? '+' : ''}${sc.crecAnualPct.toFixed(0)}%/año) ajustada por la estacionalidad del mes solo si es confiable. 🟢 rinde tu referencia y el precio es normal o menor · 🟡 rinde pero pagas sobre lo normal (negocia) o rinde menos que tu referencia · 🔴 no supera el plazo fijo.</div>`;
 }
 
 // ══════════════════════════════════════════════════════
-//  PRUEBA HISTÓRICA — "si hubiera comprado en X y vendido en Y"
+//  SIMULADOR DE INVERSIÓN — el formulario se dibuja una vez; al escribir solo se recalculan los resultados
 // ══════════════════════════════════════════════════════
-let _btSel = { c: null, v: null };
-function btCambiar(catIdx) {
-  const c = document.getElementById('bt-mes-c'), v = document.getElementById('bt-mes-v');
-  if (c && v) { _btSel = { c: parseInt(c.value), v: parseInt(v.value) }; }
-  renderBacktestPanel(catIdx);
-}
-function renderBacktestPanel(catIdx) {
-  const wrap = document.getElementById('an-backtest'); if (!wrap) return;
-  const es = MKT.estacionalidad(catIdx);
-  const mesHoy = new Date().getMonth() + 1;
-  if (_btSel.c === null) _btSel.c = mesHoy;
-  if (_btSel.v === null) _btSel.v = (es && es.mejoresVenta.length) ? es.mejoresVenta[0] : ((mesHoy + 4) % 12 + 1);
-  const bt = MKT.backtest(catIdx, _btSel.c, _btSel.v);
-  const sel = (id, val) => `<select id="${id}" onchange="btCambiar(${catIdx})" style="background:white;border:1.5px solid var(--crema3);border-radius:8px;padding:5px 8px;font-size:12px;">${AN_MESES.slice(1).map((n,i)=>`<option value="${i+1}" ${i+1===val?'selected':''}>${n}</option>`).join('')}</select>`;
-  // Top pares: horizonte 3–8 meses, al menos 4 años (o todos los disponibles menos uno)
-  const aniosDisp = es ? es.aniosUsados.length : 0;
-  const minN = Math.max(3, Math.min(4, aniosDisp - 1));
-  const pares = [];
-  for (let mc = 1; mc <= 12; mc++) for (let hh = 3; hh <= 8; hh++) { const mv = ((mc - 1 + hh) % 12) + 1; const b = MKT.backtest(catIdx, mc, mv); if (b && b.n >= minN) pares.push(b); }
-  pares.sort((a, b) => (b.prom * b.positivos / b.n) - (a.prom * a.positivos / a.n));
-  const top = pares.slice(0, 5);
-  let filas = '';
-  if (bt) {
-    filas = bt.filas.map(f => `<tr style="border-bottom:1px solid var(--crema3);">
-      <td style="padding:5px 8px;font-size:11px;font-weight:700;">${f.anio}</td>
-      <td style="padding:5px 8px;font-size:11px;">${AN_MESES[parseInt(f.ymC.slice(5))]} ${f.ymC.slice(0,4)} · $${f.pC.toFixed(3)}</td>
-      <td style="padding:5px 8px;font-size:11px;">${AN_MESES[parseInt(f.ymV.slice(5))]} ${f.ymV.slice(0,4)} · $${f.pV.toFixed(3)}</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:center;">${f.meses}</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:800;color:${f.pct>=0?'var(--pasto)':'var(--rojo)'};">${f.pct>=0?'+':''}${f.pct.toFixed(1)}%</td>
-      <td style="padding:5px 8px;font-size:11px;text-align:right;color:${f.anualPct>=MKT.TASA_CPN?'var(--pasto)':'var(--rojo)'};">${f.anualPct!=null?(f.anualPct>=0?'+':'')+f.anualPct.toFixed(1)+'%':'—'}</td>
-    </tr>`).join('');
-  }
-  wrap.innerHTML = `
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--crema3);">🧪 Prueba histórica · ${AN_CATS[catIdx]} — ¿qué habría pasado?</div>
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:8px;line-height:1.5;">Solo precio por libra (sin ganancia de peso ni gastos). Compra al promedio del mes elegido y venta al promedio del mes destino siguiente. Para la ganancia real con peso y gastos usa el simulador de abajo.</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:11px;font-weight:700;color:var(--tx2);">Comprar en ${sel('bt-mes-c',_btSel.c)} → vender en ${sel('bt-mes-v',_btSel.v)}</div>
-    ${bt ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:480px;">
-      <thead><tr style="background:var(--crema2);">
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:left;">Ciclo</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:left;">Compra</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:left;">Venta</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:center;">Meses</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Precio</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Anualizado</th>
-      </tr></thead><tbody>${filas}</tbody>
-      <tfoot><tr style="background:rgba(74,124,63,.06);"><td colspan="4" style="padding:6px 8px;font-size:11px;font-weight:800;">Promedio · ${bt.positivos} de ${bt.n} ciclos con ganancia</td><td style="padding:6px 8px;text-align:right;font-weight:800;color:${bt.prom>=0?'var(--pasto)':'var(--rojo)'};">${bt.prom>=0?'+':''}${bt.prom.toFixed(1)}%</td><td style="padding:6px 8px;text-align:right;font-weight:800;color:${bt.promAnual>=MKT.TASA_CPN?'var(--pasto)':'var(--rojo)'};">${bt.promAnual>=0?'+':''}${bt.promAnual.toFixed(1)}%</td></tr></tfoot>
-    </table></div>
-    <div style="font-size:10px;color:var(--tx3);margin-top:6px;">Referencia plazo fijo CPN: ${MKT.TASA_CPN}% anual. Mejor ciclo ${bt.mejor>=0?'+':''}${bt.mejor.toFixed(1)}% · peor ${bt.peor>=0?'+':''}${bt.peor.toFixed(1)}%.</div>` : '<div style="font-size:11px;color:var(--tx3);">No hay suficientes años con datos en esos meses.</div>'}
-    ${top.length ? `<div style="margin-top:12px;font-size:10px;font-weight:800;text-transform:uppercase;color:var(--tierra);margin-bottom:4px;">🏆 Mejores combinaciones históricas (3–8 meses, ≥${minN} ciclos)</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">${top.map((b,i)=>`<span onclick="_btSel={c:${b.mesC},v:${b.mesV}};renderBacktestPanel(${catIdx})" style="cursor:pointer;font-size:11px;padding:5px 9px;border-radius:8px;border:1px solid ${i===0?'var(--pasto)':'var(--crema3)'};background:${i===0?'rgba(74,124,63,.08)':'var(--card)'};"><strong>${AN_MESES[b.mesC]} → ${AN_MESES[b.mesV]}</strong> ${b.prom>=0?'+':''}${b.prom.toFixed(1)}% <span style="color:var(--tx3);">(${b.positivos}/${b.n})</span></span>`).join('')}</div>` : ''}
-  `;
-}
-
-// ══════════════════════════════════════════════════════
-//  SIMULADOR DE INVERSIÓN — fechas y rendimiento vs plazo fijo
-// ══════════════════════════════════════════════════════
-const SIM_GANANCIA_DEF = { 0:0.5, 1:0.3, 2:0.6, 3:0.5, 4:0.4, 5:0.4 }; // kg/día escenario conservador (mismo criterio que Lotes)
-let _simVals = { capital: 5000, pesoLb: 800, precio: null, gastosPct: 5, kgDia: null, compartido: true, meses: 8, catIdx: null };
+let _simVals = { capital: 5000, pesoLb: null, precio: null, gastosPct: 5, kgDia: null, compartido: true, meses: 8, catIdx: null };
 function simLeer(catIdx) {
   const g = id => document.getElementById(id);
-  if (g('sim-capital')) _simVals.capital = parseFloat(g('sim-capital').value) || 0;
-  if (g('sim-peso')) _simVals.pesoLb = parseFloat(g('sim-peso').value) || 0;
-  if (g('sim-precio')) _simVals.precio = parseFloat(g('sim-precio').value) || null;
-  if (g('sim-gastos')) _simVals.gastosPct = parseFloat(g('sim-gastos').value) || 0;
-  if (g('sim-kgdia')) _simVals.kgDia = parseFloat(g('sim-kgdia').value);
-  if (g('sim-comp')) _simVals.compartido = g('sim-comp').checked;
-  if (g('sim-meses')) _simVals.meses = parseInt(g('sim-meses').value) || 8;
-  renderSimuladorPanel(catIdx);
+  const num = id => { const v = parseFloat(g(id) && g(id).value); return isNaN(v) ? null : v; };
+  _simVals.capital = num('sim-capital') || 0;
+  _simVals.pesoLb = num('sim-peso') || 0;
+  _simVals.precio = num('sim-precio');
+  _simVals.gastosPct = num('sim-gastos') || 0;
+  _simVals.kgDia = num('sim-kgdia') || 0;
+  _simVals.compartido = !!(g('sim-comp') && g('sim-comp').checked);
+  _simVals.meses = parseInt(g('sim-meses') && g('sim-meses').value) || 8;
+  const ref = num('sim-ref');
+  if (ref > 0 && ref !== rendReferencia()) { if (!db.config) db.config = {}; db.config.rendRef = ref; saveDiferido(1500); }
+  renderSimResultados(catIdx);
+  renderRecoAnalisis(catIdx);
 }
 function renderSimuladorPanel(catIdx) {
   const wrap = document.getElementById('an-simulador'); if (!wrap) return;
   const t = MKT.tendencia(catIdx);
-  if (_simVals.catIdx !== catIdx) { _simVals.catIdx = catIdx; _simVals.precio = null; _simVals.kgDia = null; }
-  if (_simVals.kgDia == null || isNaN(_simVals.kgDia)) _simVals.kgDia = SIM_GANANCIA_DEF[catIdx] ?? 0.4;
-  const precioDef = _simVals.precio || (t ? t.nivel : 0);
-  const inp = (id, lbl, val, step, extra) => `<div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">${lbl}</label><input id="${id}" type="number" step="${step}" value="${val}" oninput="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;font-weight:700;background:white;box-sizing:border-box;">${extra||''}</div>`;
-  const form = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
-    ${inp('sim-capital','Capital a invertir ($)',_simVals.capital,'50')}
-    ${inp('sim-peso','Peso prom. compra (lb)',_simVals.pesoLb,'10')}
-    ${inp('sim-precio','Precio compra ($/lb)',precioDef.toFixed(3),'0.005','<div style="font-size:9px;color:var(--tx3);">ASOGAN prom: $'+(t?t.nivel.toFixed(3):'—')+'</div>')}
-    ${inp('sim-gastos','Gastos (% del capital)',_simVals.gastosPct,'1','<div style="font-size:9px;color:var(--tx3);">flete, sanidad, pasto</div>')}
-    ${inp('sim-kgdia','Ganancia (kg/día)',_simVals.kgDia,'0.05','<div style="font-size:9px;color:var(--tx3);">conservador '+(SIM_GANANCIA_DEF[catIdx]??0.4)+'</div>')}
-    <div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">Horizonte</label><select id="sim-meses" onchange="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;background:white;">${[4,6,8,10,12].map(m=>`<option value="${m}" ${m===_simVals.meses?'selected':''}>${m} meses</option>`).join('')}</select>
-      <label style="font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:4px;margin-top:6px;"><input id="sim-comp" type="checkbox" ${_simVals.compartido?'checked':''} onchange="simLeer(${catIdx})"> Compartido 50% con socio</label></div>
-  </div>`;
-  if (!t) { wrap.innerHTML = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;">💰 Simulador de inversión · ${AN_CATS[catIdx]}</div>${form}<div style="font-size:11px;color:var(--tx3);">Sin datos suficientes de precios.</div>`; return; }
-  const sim = MKT.simular({ ci: catIdx, capital: _simVals.capital, pesoLb: _simVals.pesoLb, precioCompra: precioDef, gastosPct: _simVals.gastosPct, gananciaKgDia: _simVals.kgDia, meses: _simVals.meses, compartido: _simVals.compartido });
-  if (!sim || !sim.filas.length || !_simVals.capital || !_simVals.pesoLb) { wrap.innerHTML = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;">💰 Simulador de inversión · ${AN_CATS[catIdx]}</div>${form}<div style="font-size:11px;color:var(--tx3);">Ingresa capital y peso.</div>`; return; }
-  const fdc = d => d.getDate() + ' ' + AN_MESES[d.getMonth()+1] + ' ' + d.getFullYear();
+  const titulo = `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--crema3);">💰 Simulador de inversión · ${AN_CATS[catIdx]} — comprar hoy, ¿cuánto gano y cuándo vendo?</div>`;
+  if (!t) { wrap.innerHTML = titulo + '<div style="font-size:11px;color:var(--tx3);">Sin datos suficientes de precios.</div>'; _simVals.catIdx = null; return; }
+  // Formulario: solo se redibuja al cambiar de categoría (así el cursor nunca sale de la casilla)
+  if (_simVals.catIdx !== catIdx || !document.getElementById('sim-res')) {
+    const def = mktParamsCompra(catIdx), g = gdpLotesCerrados();
+    if (_simVals.catIdx !== catIdx) { _simVals.precio = null; _simVals.pesoLb = def.pesoLb; _simVals.kgDia = def.kgDia; }
+    _simVals.catIdx = catIdx;
+    const inp = (id, lbl, val, step, extra) => `<div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">${lbl}</label><input id="${id}" type="number" inputmode="decimal" step="${step}" value="${val}" oninput="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;font-weight:700;background:white;box-sizing:border-box;">${extra || ''}</div>`;
+    wrap.innerHTML = titulo + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
+      ${inp('sim-capital', 'Capital a invertir ($)', _simVals.capital, '50')}
+      ${inp('sim-peso', 'Peso prom. compra (lb)', _simVals.pesoLb, '10', '<div style="font-size:9px;color:var(--tx3);">pon el real al comprar</div>')}
+      ${inp('sim-precio', 'Precio compra ($/lb)', '', '0.005', '<div style="font-size:9px;color:var(--tx3);">vacío = ASOGAN $' + t.nivel.toFixed(3) + '</div>')}
+      ${inp('sim-gastos', 'Gastos (% del capital)', _simVals.gastosPct, '1', '<div style="font-size:9px;color:var(--tx3);">flete, sanidad, pasto</div>')}
+      ${inp('sim-kgdia', 'Ganancia (kg/día)', _simVals.kgDia, '0.05', '<div style="font-size:9px;color:var(--tx3);">' + (g ? 'real de tus lotes: ' + g.kgDia + ' (' + g.cabezas + ' cab.)' : 'sin lotes pesados aún') + '</div>')}
+      ${inp('sim-ref', 'Rendimiento de referencia (%/año)', rendReferencia(), '1', '<div style="font-size:9px;color:var(--tx3);">tu parte; plazo fijo ' + MKT.TASA_CPN + '%</div>')}
+      <div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">Horizonte</label><select id="sim-meses" onchange="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;background:white;">${[4, 6, 8, 10, 12].map(m => `<option value="${m}" ${m === _simVals.meses ? 'selected' : ''}>${m} meses</option>`).join('')}</select>
+        <label style="font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:4px;margin-top:6px;"><input id="sim-comp" type="checkbox" ${_simVals.compartido ? 'checked' : ''} onchange="simLeer(${catIdx})"> Compartido 50% con socio</label></div>
+    </div><div id="sim-res"></div>`;
+  }
+  renderSimResultados(catIdx);
+}
+function renderSimResultados(catIdx) {
+  const res = document.getElementById('sim-res'); if (!res) return;
+  const t = MKT.tendencia(catIdx); if (!t) { res.innerHTML = ''; return; }
+  if (!_simVals.capital || !_simVals.pesoLb) { res.innerHTML = '<div style="font-size:11px;color:var(--tx3);">Ingresa capital y peso.</div>'; return; }
+  const precioC = _simVals.precio || t.nivel;
+  const sim = MKT.simular({ ci: catIdx, capital: _simVals.capital, pesoLb: _simVals.pesoLb, precioCompra: precioC, gastosPct: _simVals.gastosPct, gananciaKgDia: _simVals.kgDia, meses: _simVals.meses, compartido: _simVals.compartido });
+  const sc = MKT.senalCompra(catIdx, Object.assign(_simOpts(catIdx), { precio: precioC }));
+  if (!sim || !sim.filas.length || !sc) { res.innerHTML = '<div style="font-size:11px;color:var(--tx3);">Sin datos suficientes.</div>'; return; }
+  const fdc = d => d.getDate() + ' ' + AN_MESES[d.getMonth() + 1] + ' ' + d.getFullYear();
+  const colK = sc.key === 'ok' ? 'var(--pasto)' : sc.key === 'warn' ? 'var(--sol)' : 'var(--rojo)';
+  const bgK = sc.key === 'ok' ? 'rgba(74,124,63,.1)' : sc.key === 'warn' ? 'rgba(212,160,23,.1)' : 'rgba(192,57,43,.08)';
+  let mejor = null;
   const filas = sim.filas.map(f => {
-    const esMejor = sim.mejor && f.k === sim.mejor.k;
-    const col = f.utilidad >= 0 ? 'var(--pasto)' : 'var(--rojo)';
-    return `<tr style="border-bottom:1px solid var(--crema3);${esMejor?'background:rgba(74,124,63,.1);':''}">
-      <td style="padding:6px 8px;font-size:11px;font-weight:700;white-space:nowrap;">${f.label}${esMejor?' ⭐':''}<div style="font-size:9px;color:var(--tx3);font-weight:400;">${fdc(f.fecha)} · ${f.dias}d</div></td>
-      <td style="padding:6px 8px;font-size:11px;text-align:right;">$${f.precio.toFixed(3)}${f.usaSeas?'<div style="font-size:9px;color:var(--pasto);">'+(f.seasPct>=0?'+':'')+f.seasPct.toFixed(1)+'% ✓</div>':''}</td>
+    const parte = _simVals.compartido ? f.utilidad / 2 : f.utilidad;
+    const anual = parte / sim.invertido * 100 * 365 / f.dias;
+    if (f.k >= 3 && (!mejor || anual > mejor.anual)) mejor = { k: f.k, anual, f, parte };
+    return { f, parte, anual };
+  }).map(({ f, parte, anual }) => {
+    const esMejor = mejor && f.k === mejor.k;
+    const col = parte >= 0 ? 'var(--pasto)' : 'var(--rojo)';
+    const vsCpn = anual - MKT.TASA_CPN;
+    return `<tr style="border-bottom:1px solid var(--crema3);${esMejor ? 'background:rgba(74,124,63,.1);' : ''}">
+      <td style="padding:6px 8px;font-size:11px;font-weight:700;white-space:nowrap;">${f.label}${esMejor ? ' ⭐' : ''}<div style="font-size:9px;color:var(--tx3);font-weight:400;">${fdc(f.fecha)} · ${f.dias}d</div></td>
+      <td style="padding:6px 8px;font-size:11px;text-align:right;">$${f.precio.toFixed(3)}</td>
       <td style="padding:6px 8px;font-size:11px;text-align:right;">${Math.round(f.pesoLb)} lb</td>
       <td style="padding:6px 8px;font-size:11px;text-align:right;">${fm(f.ingreso)}</td>
-      <td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:800;color:${col};">${f.utilidad>=0?'+':''}${fm(f.utilidad)}</td>
-      ${_simVals.compartido?`<td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:700;color:${col};">${f.tuParte>=0?'+':''}${fm(f.tuParte)}</td>`:''}
-      <td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:700;color:${col};">${f.roi>=0?'+':''}${f.roi.toFixed(1)}%<div style="font-size:9px;color:var(--tx3);font-weight:400;">${f.roiAnual>=0?'+':''}${f.roiAnual.toFixed(0)}%/año</div></td>
-      <td style="padding:6px 8px;font-size:11px;text-align:right;color:var(--tx3);">${f.cpn.toFixed(1)}%<div style="font-size:9px;">${fm(f.cpnUsd)}</div></td>
-      <td style="padding:6px 8px;font-size:11px;text-align:center;">${f.superaCpn?'<span style="color:var(--pasto);font-weight:800;">✅ +'+f.ventajaVsCpn.toFixed(1)+' pts</span>':'<span style="color:var(--rojo);font-weight:800;">❌ '+f.ventajaVsCpn.toFixed(1)+' pts</span>'}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:right;color:${col};">${f.utilidad >= 0 ? '+' : ''}${fm(f.utilidad)}</td>
+      <td style="padding:6px 8px;font-size:11px;text-align:right;font-weight:800;color:${col};">${parte >= 0 ? '+' : ''}${fm(parte)}<div style="font-size:9px;font-weight:400;color:var(--tx3);">${anual >= 0 ? '+' : ''}${anual.toFixed(0)}%/año</div></td>
+      <td style="padding:6px 8px;font-size:11px;text-align:center;">${vsCpn >= 0 ? '<span style="color:var(--pasto);font-weight:800;">✅</span>' : '<span style="color:var(--rojo);font-weight:800;">❌</span>'}</td>
     </tr>`;
   }).join('');
-  const mejor = sim.mejor;
-  const veredicto = mejor && mejor.superaCpn
-    ? `<div style="background:rgba(74,124,63,.1);border:1.5px solid var(--pasto);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--tx2);line-height:1.5;"><strong style="color:var(--pasto);">⭐ Mejor salida: ${mejor.label}</strong> (${fdc(mejor.fecha)}, ${mejor.dias} días) — ${sim.cabezas} cab. × ${Math.round(mejor.pesoLb)} lb a $${mejor.precio.toFixed(3)} = ${fm(mejor.ingreso)}. Utilidad <strong>${fm(mejor.utilidad)}</strong> (${mejor.roi.toFixed(1)}% en el período · ${mejor.roiAnual.toFixed(0)}% anualizado) frente a ${fm(mejor.cpnUsd)} que daría el plazo fijo CPN en el mismo plazo${_simVals.compartido?'. Tu parte: <strong>'+fm(mejor.tuParte)+'</strong>':''}.</div>`
-    : `<div style="background:rgba(192,57,43,.08);border:1.5px solid var(--rojo);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--tx2);line-height:1.5;"><strong style="color:var(--rojo);">❌ Con estos supuestos ningún mes supera al plazo fijo CPN (${MKT.TASA_CPN}% anual).</strong> Revisa precio de compra, peso o gastos; o espera un mes con descuento confiable.</div>`;
-  wrap.innerHTML = `
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra2);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--crema3);">💰 Simulador de inversión · ${AN_CATS[catIdx]} — comprar hoy, ¿cuándo vender?</div>
-    ${form}
-    <div style="font-size:10px;color:var(--tx3);margin-bottom:8px;">Con ${fm(_simVals.capital)} compras <strong>${sim.cabezas} cabeza${sim.cabezas!==1?'s':''}</strong> (${fm(sim.invertido)} + gastos ${fm(sim.gastos)}). Precio futuro = tendencia 12m (${t.crecAnualPct>=0?'+':''}${t.crecAnualPct.toFixed(1)}%/año) + estacionalidad confiable ✓ del mes de venta.</div>
-    ${veredicto}
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:640px;">
+  res.innerHTML = `
+    <div style="font-size:10px;color:var(--tx3);margin-bottom:8px;">Con ${fm(_simVals.capital)} compras <strong>${sim.cabezas} cabeza${sim.cabezas !== 1 ? 's' : ''}</strong> a $${precioC.toFixed(3)}/lb (${fm(sim.invertido)} + gastos ${fm(sim.gastos)}).</div>
+    <div style="background:${bgK};border:1.5px solid ${colK};border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--tx2);line-height:1.5;"><strong style="color:${colK};">${sc.icon} ${sc.titulo}</strong><br>${sc.texto}${mejor ? '<br>Con este capital: tu parte <strong>' + fm(mejor.parte) + '</strong> vendiendo en ' + mejor.f.label + '.' : ''}</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:520px;">
       <thead><tr style="background:var(--crema2);">
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:left;">Venta en</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Precio proy.</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Peso/cab.</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Ingreso</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Utilidad</th>
-        ${_simVals.compartido?'<th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--pasto);text-align:right;">Tu parte</th>':''}
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">ROI</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">CPN mismo plazo</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:center;">vs CPN</th>
+        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--pasto);text-align:right;">${_simVals.compartido ? 'Tu parte' : 'Tu utilidad'}</th>
+        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:center;">vs plazo fijo</th>
       </tr></thead><tbody>${filas}</tbody></table></div>
-    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mayor rendimiento anualizado. Rango normal del precio ±${MKT.ruido(catIdx).toFixed(1)}% semanal: la utilidad real puede variar en ese orden. No incluye mortalidad ni mermas en báscula.</div>
-  `;
+    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mejor rendimiento anual de tu parte (desde el 3.er mes). El precio semanal varía ±${MKT.ruido(catIdx).toFixed(1)}%; no incluye mortalidad ni merma en báscula.</div>`;
 }
 
+// ══════════════════════════════════════════════════════
 //  RENDER RESUMEN
 // ══════════════════════════════════════════════════════
 
@@ -6336,28 +6337,15 @@ function calcSenalAsogan(lote) {
   const mesActual = hoyDate.getMonth() + 1;
   const anioActual = hoyDate.getFullYear();
   const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  // Señal de venta — motor MKT (misma fórmula que la ficha por lote: tendencia 12m + estacionalidad confiable)
-  const sv = MKT.senalVenta(catIdx); const es = MKT.estacionalidad(catIdx);
+  // Señal de venta — motor MKT (misma fórmula que la ficha por lote)
+  const sv = MKT.senalVenta(catIdx);
   if (!sv) return null;
-  let pActualMesReal=sv.nivel, sobreTrendLote=sv.desvioPct>0, difTrendLote=null;
-  difTrendLote = sv.nivel - sv.tendencia;
-  const rankingVenta=[]; for(let m=1;m<=12;m++) rankingVenta.push({mes:m,resid:es&&es.seasAvg[m]!=null?es.seasAvg[m]:0});
-  rankingVenta.sort((a,b2)=>b2.resid-a.resid);
-  const posVenta=rankingVenta.findIndex(r=>r.mes===mesActual)+1;
-  const mesesFuertes=(es?es.mejoresVenta:[]).map(m=>MN[m]);
-  const mejorMesV=(sv.proximosCaros.length?sv.proximosCaros[0].mes:rankingVenta[0].mes);
-  const off=((mejorMesV-mesActual+12)%12);
-  const fMejor=new Date(anioActual,mesActual-1+off,1);
-  const mejorMesAnio=MN[fMejor.getMonth()+1]+' '+fMejor.getFullYear();
-  const difStr=difTrendLote!=null?'$'+Math.abs(difTrendLote).toFixed(3)+' '+(sobreTrendLote?'sobre':'bajo')+' la tendencia':'';
-  const sIcon=sv.icon, sColorKey=sv.key;
   const sBanner=(sv.key==='ok'?'✅ ':sv.key==='warn'?'⚠️ ':'❌ ')+'PARA VENDER — '+sv.titulo;
-  const sTexto=sv.texto+(sv.proximosCaros.length?' Mejor ventana: '+mejorMesAnio+'.':'');
   return {
     catNom: CAT_NOMBRES[catIdx]||tipoLote,
-    sIcon, sBanner, sTexto, sColorKey,
-    mejorMesAnio, mesesFuertes,
-    posVenta, pActual: pActualMesReal,
+    sIcon: sv.icon, sBanner, sTexto: sv.texto, sColorKey: sv.key,
+    mejorMesAnio: sv.mejorMes ? sv.mejorMes.label : 'Ahora, si el animal está listo', mesesFuertes: [],
+    precioMin: sv.precioMin, pActual: sv.nivel,
     mesLabel: MN[mesActual]+' '+anioActual
   };
 }
