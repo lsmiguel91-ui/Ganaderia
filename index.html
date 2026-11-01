@@ -317,6 +317,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
     <div class="logo-icon"><img src="logo-96.png" alt="" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:12px;"></div>
     <div class="logo-text">
       <h1>Ganadería de Luis Miguel</h1>
+      <div id="app-ver-head" style="font-size:10px;color:rgba(255,255,255,.75);margin-top:2px;letter-spacing:.04em;"></div>
     </div>
   </div>
 </header>
@@ -398,6 +399,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
       <button class="btn btn-verde" onclick="openAnimalModal()">+ Añadir Animal</button>
     </div>
   </div>
+  <div id="precio-local-box"></div>
   <div id="sanidad-alerta-banner"></div>
   <div class="tbl-wrap">
     <table>
@@ -827,6 +829,10 @@ tr:hover td{background:rgba(240,232,213,.3);}
       <div class="fg"><label>Fecha de Venta</label><input type="date" id="va-fecha" onchange="calcVentaAnimalPreview()"></div>
       <div class="fg"><label>Valor de Venta ($)</label><input type="number" id="va-valor" placeholder="0.00" step="0.01" oninput="calcVentaAnimalPreview()"></div>
     </div>
+    <div class="fg-row">
+      <div class="fg"><label>Peso a la venta (kg)</label><input type="number" id="va-peso" placeholder="0" step="0.1" oninput="calcVentaAnimalPreview()"><div id="va-peso-src" style="font-size:9px;color:var(--tx3);margin-top:2px;"></div></div>
+      <div class="fg"><label>Tipo de registro</label><select id="va-tipo" onchange="calcVentaAnimalPreview()"><option value="venta">Venta cerrada</option><option value="oferta">Oferta rechazada</option></select></div>
+    </div>
     <div id="va-preview" style="margin-top:8px;"></div>
     <button class="btn btn-verde" style="width:100%;justify-content:center;margin-top:10px;" onclick="guardarVentaAnimalFinal()">✅ Confirmar Venta</button>
     <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;" onclick="cerrarModal('modal-venta-animal')">Cancelar</button>
@@ -1027,7 +1033,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v5';
 const APP_FECHA = '2026-11-01';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -1076,6 +1082,7 @@ function dbDefault() {
     animales: [],   // sin datos de ejemplo: una app recién abierta nunca debe inventar animales
     lotes: [],
     precios: [],
+    preciosLocal: [],   // ventas y ofertas observadas en El Quinche: referencial propio, NO ASOGAN
     vacunas: [],
     tratamientos: [],
     hojaRuta: { checks: {}, notas: {} },
@@ -1268,7 +1275,7 @@ function guardarLocal() { try { localStorage.setItem(SK, JSON.stringify(db)); } 
 // otro dispositivo también, y un borrado solo se aplica si el otro lado no tocó ese registro.
 // Así ni un teléfono sin señal ni dos equipos a la vez pueden pisarse los datos.
 const SK_BASE = SK + '_base';
-const SYNC_COLECCIONES = ['visitas', 'pesoCC', 'animales', 'lotes', 'vacunas', 'tratamientos'];
+const SYNC_COLECCIONES = ['visitas', 'pesoCC', 'animales', 'lotes', 'vacunas', 'tratamientos', 'preciosLocal'];
 const _js = v => JSON.stringify(v === undefined ? null : v);
 function leerBase() { try { const s = localStorage.getItem(SK_BASE); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 function guardarBase(d) { try { localStorage.setItem(SK_BASE, JSON.stringify(d)); } catch (e) {} }
@@ -2553,6 +2560,7 @@ async function sanGuardarBrigada(protId) {
 }
 
 function renderAnimales() {
+  renderPrecioLocalBox();
   const tbody = document.getElementById('animales-body');
   if (!db.animales || !db.animales.length) { tbody.innerHTML = '<tr><td colspan="8" class="tc" style="color:var(--tx3);padding:20px;">Sin animales registrados</td></tr>'; return; }
   // Verificación proactiva de categoría por edad/evento (machos y hembras) antes de pintar la tabla
@@ -3488,6 +3496,45 @@ async function guardarGastoAnimal() {
   renderGastosLista(a); renderAnimales(); await save();
   await syncEgresosAnimalesLM();
 }
+// ── Referencial propio de El Quinche: aqui se vende al ojo, nunca al precio ASOGAN ──
+const KG_LB = 2.20462;
+function getUltimoPesoAnimal(id) {
+  const ms = (db.pesoCC || []).filter(x => String(x.animalId) === String(id) && x.peso > 0);
+  if (!ms.length) return null;
+  ms.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+  return { peso: ms[0].peso, fecha: ms[0].fecha };
+}
+function precioLocalLista(cat) {
+  return (db.preciosLocal || []).filter(r => !cat || r.categoria === cat)
+    .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+}
+function renderPrecioLocalBox() {
+  const box = document.getElementById('precio-local-box');
+  if (!box) return;
+  const regs = precioLocalLista(null);
+  if (!regs.length) {
+    box.innerHTML = '<div style="background:rgba(139,90,43,.06);border:1px dashed rgba(139,90,43,.3);border-radius:12px;padding:12px;margin-bottom:12px;font-size:11px;color:var(--tx3);line-height:1.5;">📍 <strong style="color:var(--tx2);">Precio en El Quinche</strong> — aún sin registros. Cada venta u oferta que anotes con su peso construye tu propio referencial: aquí se vende al ojo y no se paga el precio ASOGAN de Santo Domingo.</div>';
+    return;
+  }
+  const porCat = {};
+  regs.forEach(r => { const c = r.categoria || '—'; (porCat[c] = porCat[c] || []).push(r); });
+  let filas = '';
+  Object.keys(porCat).sort().forEach(c => {
+    const l = porCat[c];
+    const v = l.map(r => r.usdLb).filter(x => x > 0);
+    const rango = v.length ? (Math.min.apply(null, v) === Math.max.apply(null, v)
+      ? '$' + Math.min.apply(null, v).toFixed(2)
+      : '$' + Math.min.apply(null, v).toFixed(2) + ' – $' + Math.max.apply(null, v).toFixed(2)) : '—';
+    const nv = l.filter(r => r.tipo === 'venta').length, no = l.length - nv;
+    filas += '<tr><td style="padding:4px 6px;">' + c + '</td><td style="padding:4px 6px;text-align:center;font-weight:700;">' + rango + '</td><td style="padding:4px 6px;text-align:center;color:var(--tx3);font-size:10px;">' + nv + ' venta' + (nv === 1 ? '' : 's') + (no ? ' · ' + no + ' oferta' + (no === 1 ? '' : 's') : '') + '</td></tr>';
+  });
+  const u = regs[0];
+  box.innerHTML = '<div style="background:rgba(139,90,43,.06);border:1px solid rgba(139,90,43,.25);border-radius:12px;padding:12px;margin-bottom:12px;">'
+    + '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--tierra);margin-bottom:6px;">📍 Precio en El Quinche · tus registros</div>'
+    + '<table style="width:100%;border-collapse:collapse;font-size:11px;color:var(--tx2);"><tbody>' + filas + '</tbody></table>'
+    + '<div style="font-size:10px;color:var(--tx3);margin-top:6px;">Última: ' + (u.fecha || '') + ' · ' + (u.nombre || '') + ' · $' + (u.usdLb || 0).toFixed(2) + '/lb' + (u.tipo === 'oferta' ? ' (oferta rechazada)' : '') + '</div>'
+    + '<div style="font-size:10px;color:var(--tx3);margin-top:3px;">Referencia propia — no uses precios ASOGAN para estos animales.</div></div>';
+}
 function registrarVentaAnimal(id) {
   const a = db.animales.find(x => x.id === id);
   if (!a) return;
@@ -3495,6 +3542,10 @@ function registrarVentaAnimal(id) {
   document.getElementById('va-modal-title').textContent = '💰 Vender · ' + a.nombre;
   document.getElementById('va-fecha').value = hoy();
   document.getElementById('va-valor').value = '';
+  document.getElementById('va-tipo').value = 'venta';
+  const up = getUltimoPesoAnimal(id);
+  document.getElementById('va-peso').value = up ? up.peso : '';
+  document.getElementById('va-peso-src').textContent = up ? 'Última medición: ' + up.fecha + ' — corrígelo si lo pesas hoy' : 'Sin mediciones previas — estímalo o písalo con la cinta';
   document.getElementById('va-preview').innerHTML = '';
   document.getElementById('modal-venta-animal').classList.add('open');
 }
@@ -3518,7 +3569,30 @@ function calcVentaAnimalPreview() {
       <div style="text-align:center;"><div style="font-size:10px;color:var(--tx3);">Rentabilidad/mes</div><div style="font-family:'Playfair Display',serif;font-size:16px;color:var(--tierra);">${tasaMes}%</div></div>
       <div style="text-align:center;"><div style="font-size:10px;color:var(--tx3);">ROI anual</div><div style="font-family:'Playfair Display',serif;font-size:16px;color:${roiColor};">${roiAnual !== null ? roiAnual + '%' : '—'}</div><div style="font-size:9px;color:var(--tx3);">ref. CPN: 6.5%</div></div>
     </div>
-  </div>`;
+  </div>` + calcVentaAnimalRefLocal(a, venta);
+}
+// Referencial propio: $/lb de esta venta frente a lo que te han pagado antes por esa categoria
+function calcVentaAnimalRefLocal(a, venta) {
+  const pesoKg = parseFloat((document.getElementById('va-peso') || {}).value) || 0;
+  const tipo = (document.getElementById('va-tipo') || {}).value || 'venta';
+  if (pesoKg <= 0) return '<div style="font-size:10px;color:var(--tx3);margin-top:6px;">Pon el peso y te digo a cuánto por libra equivale.</div>';
+  const usdLb = venta / (pesoKg * KG_LB);
+  const prev = precioLocalLista(a.tipo).map(r => r.usdLb).filter(x => x > 0);
+  let juicio = 'Primer registro de la categoría: desde aquí se construye tu referencia.';
+  let color = 'var(--tx3)';
+  if (prev.length) {
+    const mn = Math.min.apply(null, prev), mx = Math.max.apply(null, prev);
+    const prom = prev.reduce((s, x) => s + x, 0) / prev.length;
+    const lista = prev.slice(0, 5).map(x => '$' + x.toFixed(2)).join(' · ');
+    if (usdLb >= prom) { juicio = 'Por encima de tu promedio ($' + prom.toFixed(2) + '/lb). Buen precio.'; color = 'var(--pasto)'; }
+    else if (usdLb >= mn) { juicio = 'Bajo tu promedio ($' + prom.toFixed(2) + '/lb) pero dentro de lo que te han pagado. Hay margen para negociar.'; color = 'var(--sol)'; }
+    else { juicio = 'Por debajo de todo lo que te han pagado (mínimo $' + mn.toFixed(2) + '/lb). No aceptes sin negociar.'; color = 'var(--rojo)'; }
+    juicio += '<br><span style="color:var(--tx3);">Anteriores: ' + lista + (mx > mn ? '' : '') + '</span>';
+  }
+  return '<div style="background:rgba(139,90,43,.07);border-radius:10px;padding:10px;margin-top:8px;">'
+    + '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--tierra);margin-bottom:4px;">📍 Referencia El Quinche' + (tipo === 'oferta' ? ' · oferta' : '') + '</div>'
+    + '<div style="font-size:13px;font-weight:700;color:var(--tx);">$' + usdLb.toFixed(2) + ' por libra en pie</div>'
+    + '<div style="font-size:11px;color:' + color + ';line-height:1.5;margin-top:3px;">' + juicio + '</div></div>';
 }
 async function guardarVentaAnimalFinal() {
   const id = parseInt(document.getElementById('va-animal-id').value);
@@ -3527,7 +3601,22 @@ async function guardarVentaAnimalFinal() {
   const valor = parseFloat(document.getElementById('va-valor').value)||0;
   if (valor <= 0) { showToast('⚠️ Ingresa el valor de venta'); return; }
   const fecha = document.getElementById('va-fecha').value || hoy();
+  const tipo = document.getElementById('va-tipo').value || 'venta';
+  const pesoKg = parseFloat(document.getElementById('va-peso').value) || 0;
+  if (!db.preciosLocal) db.preciosLocal = [];
+  db.preciosLocal.push({
+    id: Date.now() + Math.random(), fecha, animalId: id, nombre: a.nombre,
+    categoria: a.tipo, pesoKg, valor,
+    usdLb: pesoKg > 0 ? +(valor / (pesoKg * KG_LB)).toFixed(4) : 0, tipo
+  });
+  if (tipo === 'oferta') {
+    // Una oferta rechazada NO vende el animal ni toca Finanzas: solo alimenta tu referencial
+    cerrarModal('modal-venta-animal'); renderAnimales(); await save();
+    showToast(pesoKg > 0 ? '📍 Oferta registrada · $' + (valor / (pesoKg * KG_LB)).toFixed(2) + '/lb' : '📍 Oferta registrada');
+    return;
+  }
   a.valorVenta = valor; a.fventa = fecha; a.estado = 'vendido';
+  if (pesoKg > 0) a.pesoVenta = pesoKg;
   const costoTotal = (a.valor||0) + sumaGastos(a.gastos||[]);
   const util = valor - costoTotal;
   const dias = diasEntre(a.fcompra||a.fnac||hoy(), fecha);
@@ -6973,6 +7062,8 @@ function exportarPreciosJSON() {
 // ══════════════════════════════════════════════════════
 (async function init() {
   try {
+    const _avh = document.getElementById('app-ver-head');
+    if (_avh) _avh.textContent = APP_VERSION + ' · ' + APP_FECHA;
     const s = localStorage.getItem(SK);
     if (s) {
       const parsed = JSON.parse(s);
