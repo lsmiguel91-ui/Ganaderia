@@ -1033,7 +1033,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v6';
+const APP_VERSION = 'v7';
 const APP_FECHA = '2026-11-01';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -1868,8 +1868,8 @@ const MKT = (() => {
     let best = null;
     s.filas.filter(f => f.k >= 3).forEach(f => {
       const parte = pp.compartido ? f.utilidad / 2 : f.utilidad;
-      const anual = parte / s.invertido * 100 * 365 / f.dias;
-      if (!best || anual > best.anual) best = { anual, fila: f, parteCab: parte / s.cabezas, periodoPct: parte / s.invertido * 100 };
+      const anual = parte / s.desembolso * 100 * 365 / f.dias;
+      if (!best || anual > best.anual) best = { anual, fila: f, parteCab: parte / s.cabezas, periodoPct: parte / s.desembolso * 100 };
     });
     return best;
   }
@@ -1938,6 +1938,9 @@ const MKT = (() => {
     const cabezas = Math.max(1, Math.floor(p.capital / costoCab));
     const invertido = cabezas * costoCab;
     const gastos = invertido * (p.gastosPct || 0) / 100;
+    // Base de todo porcentaje: lo que Luis Miguel desembolsa de verdad (compra + gastos),
+    // porque los gastos tambien los pone el 100% el (aparceria). Antes solo se usaba la compra.
+    const desembolso = invertido + gastos;
     const kg0 = p.pesoLb / 2.205;
     const filas = [];
     const hoyD = new Date();
@@ -1948,13 +1951,13 @@ const MKT = (() => {
       const pesoLb = (kg0 + p.gananciaKgDia * dias) * 2.205;
       const ingreso = cabezas * pesoLb * pr.precio;
       const utilidad = ingreso - invertido - gastos;
-      const roi = utilidad / invertido * 100;
+      const roi = utilidad / desembolso * 100;
       const roiAnual = roi * 365 / dias;
       const cpn = TASA_CPN * dias / 365;
-      filas.push({ k, mes: pr.mes, label: pr.label, fecha, dias, precio: pr.precio, seasPct: pr.seasPct, usaSeas: pr.usaSeas, pesoLb, ingreso, utilidad, tuParte: p.compartido ? utilidad / 2 : utilidad, roi, roiAnual, cpn, cpnUsd: invertido * cpn / 100, superaCpn: roi > cpn, ventajaVsCpn: roi - cpn });
+      filas.push({ k, mes: pr.mes, label: pr.label, fecha, dias, precio: pr.precio, seasPct: pr.seasPct, usaSeas: pr.usaSeas, pesoLb, ingreso, utilidad, tuParte: p.compartido ? utilidad / 2 : utilidad, roi, roiAnual, cpn, cpnUsd: desembolso * cpn / 100, superaCpn: roi > cpn, ventajaVsCpn: roi - cpn });
     }
     let mejor = null; filas.forEach(f => { if (!mejor || f.roiAnual > mejor.roiAnual) mejor = f; });
-    return { cabezas, invertido, gastos, precioCompra: precioC, filas, mejor, tendencia: t };
+    return { cabezas, invertido, gastos, desembolso, precioCompra: precioC, filas, mejor, tendencia: t };
   }
   function categoriasInteres() { const c = (typeof db !== 'undefined' && db.config && db.config.mktCats); return Array.isArray(c) && c.length ? c : [4]; }
   return { MN, TASA_CPN, UMBRAL_SENAL_PCT, serie, mensual, mm12, nivel, ruido, tendencia, estacionalidad, cambioPatron, proyeccion, normalMes, senalCompra, senalVenta, simular, categoriasInteres, ymAdd, ymHoy };
@@ -1963,7 +1966,7 @@ const MKT = (() => {
 // ── Supuestos de compra comunes a toda la app (tarjetas, banner, lotes y simulador) ──
 const SIM_PESO_DEF = { 0: 500, 1: 1100, 2: 900, 3: 650, 4: 800, 5: 220 };   // lb por cabeza, típico de feria
 const SIM_GANANCIA_DEF = { 0:0.5, 1:0.3, 2:0.6, 3:0.5, 4:0.4, 5:0.4 };       // kg/día si aún no hay lotes cerrados con pesos
-const REND_REF_DEF = 15;                                                     // %/año de tu parte — referencia, editable
+const REND_REF_DEF = 15;                                                     // %/año — solo mientras no haya lotes liquidados
 // Lee "10.210 lb" o "1115 lb" al final de la descripción de una venta parcial
 function _lbDeTexto(txt) {
   const m = String(txt || '').match(/([\d.,]+)\s*lb\s*$/i); if (!m) return null;
@@ -1998,7 +2001,13 @@ function rendRealLotes() {
   });
   return w ? { anual: suma / w, lotes: n } : null;
 }
-function rendReferencia() { const v = parseFloat(db.config && db.config.rendRef); return v > 0 ? v : REND_REF_DEF; }
+// Referencia de rendimiento: manda lo que el usuario escriba; si no ha escrito nada,
+// manda su propio historial de lotes liquidados; y solo sin historial, el valor de arranque.
+function rendReferencia() {
+  const v = parseFloat(db.config && db.config.rendRef); if (v > 0) return v;
+  const rr = rendRealLotes(); if (rr && rr.anual > 0) return Math.round(rr.anual * 10) / 10;
+  return REND_REF_DEF;
+}
 function mktParamsCompra(ci) {
   const g = gdpLotesCerrados();
   return { meses: 8, pesoLb: SIM_PESO_DEF[ci] || 500, gastosPct: 5, kgDia: g ? g.kgDia : (SIM_GANANCIA_DEF[ci] ?? 0.4), compartido: true, rendRef: rendReferencia(), precio: null };
@@ -5777,7 +5786,7 @@ function renderSimResultados(catIdx) {
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--pasto);text-align:right;">${_simVals.compartido ? 'Tu parte (50%)' : 'Tu utilidad (100%)'}</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:center;">vs plazo fijo</th>
       </tr></thead><tbody>${filas}</tbody></table></div>
-    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mejor rendimiento anual de tu parte (desde el 3.er mes). El precio semanal varía ±${MKT.ruido(catIdx).toFixed(1)}%; no incluye mortalidad ni merma en báscula.<br><strong>Utilidad del lote</strong> = ingreso − capital − gastos, el negocio completo. <strong>${_simVals.compartido ? 'Tu parte' : 'Tu utilidad'}</strong> = ${_simVals.compartido ? 'la mitad de esa utilidad (casilla "Compartido 50%" marcada)' : 'toda la utilidad (casilla "Compartido 50%" sin marcar)'}. El <strong>%/año</strong> se calcula sobre el capital que pones tú, que es el 100%${_simVals.compartido ? ' — por eso la mitad de la utilidad sobre todo tu capital' : ''}.</div>`;
+    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mejor rendimiento anual de tu parte (desde el 3.er mes). El precio semanal varía ±${MKT.ruido(catIdx).toFixed(1)}%; no incluye mortalidad ni merma en báscula.<br><strong>Utilidad del lote</strong> = ingreso − capital − gastos, el negocio completo. <strong>${_simVals.compartido ? 'Tu parte' : 'Tu utilidad'}</strong> = ${_simVals.compartido ? 'la mitad de esa utilidad (casilla "Compartido 50%" marcada)' : 'toda la utilidad (casilla "Compartido 50%" sin marcar)'}. El <strong>%/año</strong> se calcula sobre todo lo que desembolsas (compra + gastos), que lo pones tú al 100%${_simVals.compartido ? ' — o sea, la mitad de la utilidad sobre todo tu desembolso' : ''}.</div>`;
 }
 
 // ══════════════════════════════════════════════════════
