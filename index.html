@@ -1033,8 +1033,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v7';
-const APP_FECHA = '2026-11-01';
+const APP_VERSION = 'v8';
+const APP_FECHA = '2026-11-02';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -5041,15 +5041,43 @@ function parsearJSONSimple(raw){
   return {datos, ignoradas: [...ignoradas]};
 }
 
+// Limpia lo que suele venir pegado desde el chat: cercos de código, comillas curvas y comas sobrantes
+function limpiarJSONPegado(t){
+  let s = String(t || '').trim();
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/,'').trim();
+  s = s.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  return s.trim();
+}
+// Dice QUÉ está mal en vez de "revisa el formato": lo más común es que el texto se corte al copiarlo
+function diagnosticoJSON(s){
+  const fuera = (ch) => { let n = 0, dentro = false, esc = false;
+    for (const c of s) {
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === '"') { dentro = !dentro; continue; }
+      if (!dentro && c === ch) n++;
+    } return n; };
+  const ab = fuera('{') - fuera('}'), ac = fuera('[') - fuera(']');
+  if (ab > 0 || ac > 0) return 'El texto quedó cortado al pegarlo — vuelve a copiarlo completo';
+  if (ab < 0 || ac < 0) return 'Sobran llaves o corchetes al final — revisa lo pegado';
+  if (!/^[\[{]/.test(s)) return 'Lo pegado no empieza con { o [ — copia solo el JSON';
+  return null;
+}
 function importarPreciosDesdeTexto(){
-  const txt=document.getElementById('pegar-json-txt').value.trim();
+  const campo=document.getElementById('pegar-json-txt');
+  const txt=limpiarJSONPegado(campo.value);
   if(!txt){showToast('⚠️ Pega el JSON primero');return;}
+  if(txt!==campo.value.trim()) campo.value=txt;   // deja a la vista lo que de verdad se va a importar
   let payload;
   try{
     const raw=JSON.parse(txt);
     // Si ya tiene formato {datos:[...]} lo usa directo; si no, convierte
     payload = (raw.datos && Array.isArray(raw.datos)) ? raw : parsearJSONSimple(raw);
-  }catch(e){showToast('⚠️ JSON inválido — revisa el formato');return;}
+  }catch(e){
+    showToast('⚠️ ' + (diagnosticoJSON(txt) || 'JSON inválido — revisa el formato'));
+    return;
+  }
   procesarPayloadPrecios(payload);
   cerrarPegarJSON();
 }
