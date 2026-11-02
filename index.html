@@ -1033,7 +1033,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v5';
+const APP_VERSION = 'v6';
 const APP_FECHA = '2026-11-01';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -5716,7 +5716,7 @@ function renderSimuladorPanel(catIdx) {
   if (!t) { wrap.innerHTML = titulo + '<div style="font-size:11px;color:var(--tx3);">Sin datos suficientes de precios.</div>'; _simVals.catIdx = null; return; }
   // Formulario: solo se redibuja al cambiar de categoría (así el cursor nunca sale de la casilla)
   if (_simVals.catIdx !== catIdx || !document.getElementById('sim-res')) {
-    const def = mktParamsCompra(catIdx), g = gdpLotesCerrados();
+    const def = mktParamsCompra(catIdx), g = gdpLotesCerrados(), rr = rendRealLotes();
     if (_simVals.catIdx !== catIdx) { _simVals.precio = null; _simVals.pesoLb = def.pesoLb; _simVals.kgDia = def.kgDia; }
     _simVals.catIdx = catIdx;
     const inp = (id, lbl, val, step, extra) => `<div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">${lbl}</label><input id="${id}" type="number" inputmode="decimal" step="${step}" value="${val}" oninput="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;font-weight:700;background:white;box-sizing:border-box;">${extra || ''}</div>`;
@@ -5726,7 +5726,7 @@ function renderSimuladorPanel(catIdx) {
       ${inp('sim-precio', 'Precio compra ($/lb)', '', '0.005', '<div style="font-size:9px;color:var(--tx3);">vacío = ASOGAN $' + t.nivel.toFixed(3) + '</div>')}
       ${inp('sim-gastos', 'Gastos (% del capital)', _simVals.gastosPct, '1', '<div style="font-size:9px;color:var(--tx3);">flete, sanidad, pasto</div>')}
       ${inp('sim-kgdia', 'Ganancia (kg/día)', _simVals.kgDia, '0.05', '<div style="font-size:9px;color:var(--tx3);">' + (g ? 'real de tus lotes: ' + g.kgDia + ' (' + g.cabezas + ' cab.)' : 'sin lotes pesados aún') + '</div>')}
-      ${inp('sim-ref', 'Rendimiento de referencia (%/año)', rendReferencia(), '1', '<div style="font-size:9px;color:var(--tx3);">tu parte; plazo fijo ' + MKT.TASA_CPN + '%</div>')}
+      ${inp('sim-ref', 'Rendimiento de referencia (%/año)', rendReferencia(), '1', '<div style="font-size:9px;color:var(--tx3);">' + (rr ? 'real de tus lotes: ' + rr.anual.toFixed(0) + '%/año (' + rr.lotes + ' lote' + (rr.lotes === 1 ? '' : 's') + ')' : 'sin lotes liquidados aún') + '; plazo fijo ' + MKT.TASA_CPN + '%</div>')}
       <div><label style="font-size:10px;color:var(--tx3);display:block;margin-bottom:3px;">Horizonte</label><select id="sim-meses" onchange="simLeer(${catIdx})" style="width:100%;padding:6px 8px;border:1.5px solid var(--crema3);border-radius:7px;font-size:12px;background:white;">${[4, 6, 8, 10, 12].map(m => `<option value="${m}" ${m === _simVals.meses ? 'selected' : ''}>${m} meses</option>`).join('')}</select>
         <label style="font-size:10px;color:var(--tx2);display:flex;align-items:center;gap:4px;margin-top:6px;"><input id="sim-comp" type="checkbox" ${_simVals.compartido ? 'checked' : ''} onchange="simLeer(${catIdx})"> Compartido 50% con socio</label></div>
     </div><div id="sim-res"></div>`;
@@ -5773,11 +5773,11 @@ function renderSimResultados(catIdx) {
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Precio proy.</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Peso/cab.</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Ingreso</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Utilidad</th>
-        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--pasto);text-align:right;">${_simVals.compartido ? 'Tu parte' : 'Tu utilidad'}</th>
+        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:right;">Utilidad del lote</th>
+        <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--pasto);text-align:right;">${_simVals.compartido ? 'Tu parte (50%)' : 'Tu utilidad (100%)'}</th>
         <th style="padding:5px 8px;font-size:9px;text-transform:uppercase;color:var(--tx3);text-align:center;">vs plazo fijo</th>
       </tr></thead><tbody>${filas}</tbody></table></div>
-    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mejor rendimiento anual de tu parte (desde el 3.er mes). El precio semanal varía ±${MKT.ruido(catIdx).toFixed(1)}%; no incluye mortalidad ni merma en báscula.</div>`;
+    <div style="font-size:9px;color:var(--tx3);margin-top:6px;line-height:1.5;">⭐ = mejor rendimiento anual de tu parte (desde el 3.er mes). El precio semanal varía ±${MKT.ruido(catIdx).toFixed(1)}%; no incluye mortalidad ni merma en báscula.<br><strong>Utilidad del lote</strong> = ingreso − capital − gastos, el negocio completo. <strong>${_simVals.compartido ? 'Tu parte' : 'Tu utilidad'}</strong> = ${_simVals.compartido ? 'la mitad de esa utilidad (casilla "Compartido 50%" marcada)' : 'toda la utilidad (casilla "Compartido 50%" sin marcar)'}. El <strong>%/año</strong> se calcula sobre el capital que pones tú, que es el 100%${_simVals.compartido ? ' — por eso la mitad de la utilidad sobre todo tu capital' : ''}.</div>`;
 }
 
 // ══════════════════════════════════════════════════════
