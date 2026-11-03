@@ -1033,8 +1033,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v8';
-const APP_FECHA = '2026-11-02';
+const APP_VERSION = 'v9';
+const APP_FECHA = '2026-11-03';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -7451,10 +7451,10 @@ const PLANILLA_ANUAL = [
    meses:[1,4,7,10], aplica:'todos', edadMinDias:60, kgPorMl:50, intervaloLabel:'Cada 90 días (desde los 2 meses de edad)',
    desc:'Parásitos internos y externos. No antes de los 2 meses de edad (antes: desparasitante oral pediátrico). RETIRO: 42 días antes de faena / 28 días antes de ordeño.',
    dosis:'1 ml por cada 50 kg de peso', via:'SC — tabla del cuello', quien:'tú mismo'},
-  {id:'fasciol',   nombre:'Fasciolicida (Closantel)',   tipo:'antipar', cat:'🐛 Antiparasitarios',
-   meses:[5,11],  aplica:'todos',   edadMinDias:90, kgPorMl:20, intervaloLabel:'Cada 6 meses — inicio y fin época lluviosa (desde los 3 meses)',
-   desc:'Fasciola hepatica (distomatosis). Crítico en zonas húmedas. RETIRO: 28 días antes de faena.',
-   dosis:'2.5 mg/kg (≈1 ml/20 kg)', via:'IM o SC según prospecto', quien:'tú mismo'},
+  {id:'fasciol',   nombre:'Fasciolicida — Saguaymic Plus (triclabendazol 10% + fenbendazol 10%)', tipo:'antipar', cat:'🐛 Antiparasitarios',
+   meses:[5,11],  aplica:'todos',   edadMinDias:90, kgPorMl:8.333, intervaloLabel:'Cada 6 meses — inicio y fin época lluviosa (desde los 3 meses)',
+   desc:'Fasciola hepatica (distomatosis). Crítico en zonas húmedas: el caracol que la transmite se activa con la lluvia. El triclabendazol mata la fasciola en TODOS sus estadios, incluidas las formas jóvenes que migran por el hígado (el closantel, que se usaba antes, solo alcanza a las adultas); el fenbendazol cubre además los nematodos gastrointestinales. ES ORAL, no inyectable: jeringa sin aguja o pistola dosificadora, al fondo de la lengua. AGITAR BIEN el frasco antes de cada toma — es una suspensión y sin agitar las primeras dosis salen flojas. NUNCA subdosificar: es la forma más rápida de generar resistencia al triclabendazol. RETIRO: carne 28 días · leche 12 días.',
+   dosis:'6 ml por cada 50 kg de peso (12 mg/kg) — bovinos', via:'ORAL — al fondo de la lengua', quien:'tú mismo'},
   // VITAMINAS
   {id:'ade',       nombre:'Vitamina ADE',               tipo:'vitamina', cat:'🌿 Vitaminas y Minerales',
    meses:[1,4,7,10], aplica:'todos', intervaloLabel:'Cada 90 días',
