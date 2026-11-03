@@ -1033,7 +1033,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v9';
+const APP_VERSION = 'v10';
 const APP_FECHA = '2026-11-03';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -3243,6 +3243,28 @@ function calcEdadAnimal(fecha) {
   return Math.floor(meses/12) + ' años ' + (meses%12) + ' m';
 }
 // Devuelve el último registro de peso (kg) de un animal, o null
+// Último peso registrado CON su fecha: toda dosis por peso debe decir de cuándo es el peso
+function ultimoPesoRegAnimal(animalId) {
+  const regs = (db.pesoCC || [])
+    .filter(r => String(r.animalId) === String(animalId) && r.peso != null && r.peso !== '')
+    .sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
+  return regs.length ? { peso: Number(regs[0].peso), fecha: regs[0].fecha } : null;
+}
+// Calcula el volumen real cuando el texto de la dosis viene por peso ("1 ml/50 kg",
+// "6 ml por cada 50 kg"). Sirve para los pasos de protocolo, que no pasan por kgPorMl.
+function dosisConPeso(texto, animalId) {
+  const t = String(texto || '');
+  const re = /(\d+(?:[.,]\d+)?)\s*ml\s*(?:\/\s*|por\s+cada\s+|cada\s+)(\d+(?:[.,]\d+)?)\s*kg/gi;
+  const partes = []; let m;
+  while ((m = re.exec(t)) !== null) partes.push([parseFloat(m[1].replace(',', '.')), parseFloat(m[2].replace(',', '.'))]);
+  if (!partes.length) return t;
+  const reg = ultimoPesoRegAnimal(animalId);
+  if (!reg) return t + ' — ⚠️ registra el peso para calcular los ml';
+  const calc = partes.filter(x => x[1] > 0)
+    .map(x => (Math.max(0.5, Math.round(reg.peso * x[0] / x[1] * 10) / 10)) + ' ml').join(' + ');
+  if (!calc) return t;
+  return t + ' → <strong>' + calc + '</strong> · peso ' + reg.peso + ' kg del ' + fd(reg.fecha);
+}
 function ultimoPesoAnimal(animalId) {
   const regs = (db.pesoCC || [])
     .filter(r => String(r.animalId) === String(animalId) && r.peso != null && r.peso !== '')
@@ -6264,7 +6286,7 @@ function renderListaTratamientos(animalId) {
           <button onclick="borrarTratamiento(${t.id})" style="background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.2);color:var(--rojo);border-radius:7px;padding:4px 7px;cursor:pointer;font-size:11px;">🗑</button>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">💊 ${t.dosis} · ${t.via}${(!esProtocolo && t.intervalo) ? ` · Cada ${t.intervalo} días` : ''}</div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">💊 ${cumplido ? t.dosis : dosisConPeso(t.dosis, animalId)} · ${t.via}${(!esProtocolo && t.intervalo) ? ` · Cada ${t.intervalo} días` : ''}</div>
       <div style="font-size:11px;color:var(--tx3);margin-bottom:3px;">📅 Fecha de aplicación: ${fd(t.fechaAplicacion)}</div>
       <div style="font-size:11px;color:${colorProx};margin-bottom:${t.modo?'6px':'0'};">${estadoProx}</div>
       ${t.modo ? `<details style="margin-top:6px;"><summary style="font-size:10px;color:var(--tierra);cursor:pointer;font-weight:600;">📋 Modo de aplicación</summary>
@@ -7515,10 +7537,10 @@ const SAN_RESPIRATORIA_HASTA_DIAS = 90; // hasta (después de esto ya se conside
 // Dosis real para el animal según su último peso registrado (ítems con kgPorMl). Sin peso: pide registrarlo.
 function sanDosis(item, animal) {
   if (!item || !item.kgPorMl) return item ? item.dosis : '';
-  const peso = animal ? ultimoPesoAnimal(animal.id) : null;
-  if (!peso) return item.dosis + ' — ⚠️ registra el peso para calcular';
-  const ml = Math.max(0.5, Math.round(peso / item.kgPorMl * 10) / 10);
-  return ml + ' ml (' + peso + ' kg · ' + item.dosis + ')';
+  const reg = animal ? ultimoPesoRegAnimal(animal.id) : null;
+  if (!reg) return item.dosis + ' — ⚠️ registra el peso para calcular';
+  const ml = Math.max(0.5, Math.round(reg.peso / item.kgPorMl * 10) / 10);
+  return ml + ' ml · peso ' + reg.peso + ' kg del ' + fd(reg.fecha) + ' (' + item.dosis + ')';
 }
 function sanDosisVac(v) {
   if (!v || v.fechaCumplida) return v ? v.dosis : '';
