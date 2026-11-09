@@ -101,6 +101,14 @@ tr:hover td{background:rgba(240,232,213,.3);}
 /* MODAL */
 .modal-ov{position:fixed;inset:0;background:rgba(44,26,14,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:flex-end;justify-content:center;}
 .modal-ov.open{display:flex;}
+.bol-cat{margin-bottom:10px;}
+.bol-cat-t{font-size:12px;font-weight:700;margin-bottom:4px;color:var(--tx);}
+.bol-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.bol-cel{display:flex;flex-direction:column;font-size:10px;color:var(--tx3);gap:2px;min-width:0;}
+.bol-cel input{width:100%;box-sizing:border-box;padding:8px 4px;font-size:16px;text-align:center;border:1.5px solid var(--crema3);border-radius:8px;background:white;color:var(--tx);outline:none;}
+.bol-cel input.bol-cambio{background:#fff4c2;border-color:#d4a017;font-weight:700;}
+.bol-cel input.bol-error{background:#fde2df;border-color:var(--rojo);}
+.bol-cel small{min-height:12px;font-size:9px;color:#a6790c;}
 .modal{background:var(--crema);border-radius:22px 22px 0 0;padding:24px 18px 32px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;animation:slideUp .3s cubic-bezier(.2,.8,.3,1);}
 @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 .modal-handle{width:36px;height:3px;background:var(--crema3);border-radius:2px;margin:0 auto 18px;}
@@ -434,11 +442,9 @@ tr:hover td{background:rgba(240,232,213,.3);}
   <div class="tab-header">
     <span class="tab-title">📊 Precios Asogan</span>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      <button class="btn btn-verde" onclick="document.getElementById('asogan-import-input').click()" style="font-size:12px;">📥 Importar JSON</button>
+      <button class="btn btn-verde" onclick="abrirFormularioBoletin()" style="font-size:12px;">📝 Formulario</button>
       <button class="btn btn-verde" onclick="abrirPegarJSON()" style="font-size:12px;">📋 Pegar JSON</button>
-      <button class="btn btn-tierra" onclick="exportarPreciosJSON()" style="font-size:12px;">📤 Exportar datos</button>
     </div>
-    <input type="file" id="asogan-import-input" accept="application/json,.json" style="display:none;" onchange="importarPreciosJSON(this)">
     <div id="pegar-json-panel" style="display:none;margin-top:10px;">
       <textarea id="pegar-json-txt" placeholder="Pega aquí el JSON generado por Claude..." style="width:100%;height:120px;background:var(--sf2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:vertical;box-sizing:border-box;"></textarea>
       <div style="display:flex;gap:8px;margin-top:6px;">
@@ -672,6 +678,20 @@ tr:hover td{background:rgba(240,232,213,.3);}
       <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--sol);margin-bottom:8px;">📅 Protocolo especial — Manchas (preparto)</div>
       <div style="font-size:12px;color:var(--tx2);line-height:1.6;">A los 60 días antes del parto (~17 jul 2026), aplicar 1 dosis de <strong>Selenio + Vitamina E inyectable</strong> (E-Se de Tornel o similar). Previene retención de placenta y da anticuerpos al ternero. Esta dosis ya está coordinada con el protocolo preparto.</div>
     </div>
+  </div>
+</div>
+
+<!-- ===== MODAL BOLETÍN ASOGAN ===== -->
+<div class="modal-ov" id="modal-boletin">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📝 Boletín ASOGAN</div>
+    <div class="fg"><label>📅 Fecha del boletín</label><input type="date" id="bol-fecha" onchange="bolRellenar()" style="max-width:180px;"></div>
+    <div id="bol-base" style="font-size:11px;color:var(--tx3);margin:-4px 0 10px;line-height:1.4;"></div>
+    <div id="bol-grid"></div>
+    <div id="bol-cuenta" style="font-size:12px;font-weight:700;margin:4px 0 8px;color:var(--tx);"></div>
+    <button class="btn btn-verde" style="width:100%;justify-content:center;" onclick="guardarBoletin()">💾 Guardar boletín</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;" onclick="cerrarModal('modal-boletin')">Cancelar</button>
   </div>
 </div>
 
@@ -1033,8 +1053,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v10';
-const APP_FECHA = '2026-11-03';
+const APP_VERSION = 'v11';
+const APP_FECHA = '2026-11-09';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -5154,21 +5174,79 @@ async function procesarPayloadPrecios(payload){
   showToast(`✅ ${agregados} nuevos · ${reemplazados} actualizados · Total: ${db.precios.length}` + ((payload.ignoradas && payload.ignoradas.length) ? ` · ⚠️ No reconocidas: ${payload.ignoradas.join(', ')}` : ''));
 }
 
-function importarPreciosJSON(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = async function(e) {
-    try {
-      const raw = JSON.parse(e.target.result);
-      const payload = (raw.datos && Array.isArray(raw.datos)) ? raw : parsearJSONSimple(raw);
-      await procesarPayloadPrecios(payload);
-    } catch(err) {
-      showToast('⚠️ Error al leer JSON: ' + err.message);
-    }
-    input.value = '';
-  };
-  reader.readAsText(file);
+// ── FORMULARIO DEL BOLETÍN ASOGAN ──
+// Viene lleno con el boletín anterior: se corrigen solo las casillas que cambiaron.
+// Guarda por el mismo camino que Pegar JSON (procesarPayloadPrecios).
+const BOL_CAT = [['Torete','🐂'],['Toro','🐃'],['Novillo Gordo','🥩'],['Vacona','🐄'],['Vaca','🐮'],['Cerdo Engorde','🐷']];
+const BOL_CAMPOS = [['exc','Exc.'],['max','Máx'],['prom','Prom'],['min','Mín']];
+function bolNum(v){
+  const t = String(v == null ? '' : v).trim().replace(',', '.');
+  if (t === '') return null;
+  const n = Number(t);
+  return isFinite(n) ? n : NaN;
+}
+function bolFilaBase(fecha){
+  const pr = (db.precios || []).slice().sort((a, b) => a[0].localeCompare(b[0]));
+  const igual = pr.find(p => p[0] === fecha);
+  if (igual) return { fila: igual, existe: true };
+  const previas = pr.filter(p => p[0] < fecha);
+  return { fila: previas.length ? previas[previas.length - 1] : (pr[pr.length - 1] || null), existe: false };
+}
+function abrirFormularioBoletin(){
+  document.getElementById('bol-fecha').value = hoy();
+  bolRellenar();
+  document.getElementById('modal-boletin').classList.add('open');
+}
+function bolRellenar(){
+  const fecha = document.getElementById('bol-fecha').value;
+  const { fila, existe } = bolFilaBase(fecha);
+  document.getElementById('bol-base').textContent = !fila ? 'No hay boletines anteriores: llena todas las casillas.'
+    : existe ? 'Ya hay un boletín con esta fecha: se muestran sus valores y al guardar se reemplaza.'
+    : 'Valores del boletín del ' + fd(fila[0]) + '. Toca solo los que cambiaron.';
+  document.getElementById('bol-grid').innerHTML = BOL_CAT.map(([cat, ico], ci) =>
+    '<div class="bol-cat"><div class="bol-cat-t">' + ico + ' ' + cat + '</div><div class="bol-row">' +
+    BOL_CAMPOS.map(([c, lbl], j) => {
+      const v = fila ? fila[1 + ci * 4 + j] : null;
+      const t = v == null ? '' : String(v);
+      return '<label class="bol-cel"><span>' + lbl + '</span><input type="text" inputmode="decimal" enterkeyhint="next" data-ci="' + ci + '" data-j="' + j + '" data-prev="' + t + '" value="' + t + '" onfocus="this.select()" oninput="bolMarcar(this)" onkeydown="bolTecla(event,this)"><small></small></label>';
+    }).join('') + '</div></div>').join('');
+  bolContar();
+}
+function bolMarcar(el){
+  const ahora = bolNum(el.value), antes = bolNum(el.dataset.prev);
+  const cambio = ahora !== antes;
+  const malo = Number.isNaN(ahora) || (ahora != null && (ahora < 0.1 || ahora > 5));
+  el.classList.toggle('bol-cambio', cambio && !malo);
+  el.classList.toggle('bol-error', malo);
+  el.parentElement.querySelector('small').textContent = cambio ? 'antes ' + (el.dataset.prev || '—') : '';
+  bolContar();
+}
+function bolTecla(e, el){
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const ins = [...document.querySelectorAll('#bol-grid input')];
+  const sig = ins[ins.indexOf(el) + 1];
+  if (sig) sig.focus(); else el.blur();
+}
+function bolContar(){
+  const n = document.querySelectorAll('#bol-grid input.bol-cambio').length;
+  document.getElementById('bol-cuenta').textContent = n ? '✏️ ' + n + (n === 1 ? ' valor cambiado' : ' valores cambiados') : 'Sin cambios: se guardan los mismos precios con la fecha elegida.';
+}
+async function guardarBoletin(){
+  const fecha = document.getElementById('bol-fecha').value;
+  if (!fecha) { showToast('⚠️ Elige la fecha del boletín'); return; }
+  const ins = [...document.querySelectorAll('#bol-grid input')];
+  if (ins.some(i => i.classList.contains('bol-error'))) { showToast('⚠️ Hay un valor que no es un precio válido (en rojo)'); return; }
+  const row = { fecha };
+  BOL_CAT.forEach(([cat], ci) => {
+    row[cat] = {};
+    BOL_CAMPOS.forEach(([c], j) => {
+      const el = ins.find(i => Number(i.dataset.ci) === ci && Number(i.dataset.j) === j);
+      row[cat][c] = el ? bolNum(el.value) : null;
+    });
+  });
+  cerrarModal('modal-boletin');
+  await procesarPayloadPrecios({ datos: [row] });
 }
 
 
@@ -7072,46 +7150,6 @@ function generarAlertasPesoCC() {
   return alertas.map(a => '<div style="background:' + colores[a.tipo] + ';border-radius:10px;padding:10px 13px;margin-bottom:8px;font-size:12px;line-height:1.5;">' + a.msg + '</div>').join('');
 }
 
-// ══════════════════════════════════════════════════════
-//  EXPORTAR
-// ══════════════════════════════════════════════════════
-function exportarPreciosJSON() {
-  const precios = db.precios || PRECIOS_INICIALES;
-  const CAT = ['Torete','Toro','Novillo Gordo','Vacona','Vaca','Cerdo Engorde'];
-  const registros = precios.map(r => {
-    const obj = { fecha: r[0] };
-    CAT.forEach((cat, i) => {
-      const b = 1 + i * 4;
-      obj[cat] = { exc: r[b], max: r[b+1], prom: r[b+2], min: r[b+3] };
-    });
-    return obj;
-  });
-  const payload = {
-    fuente: 'ASOGAN Santo Domingo de los Tsáchilas',
-    unidad: 'USD por libra en pie',
-    totalRegistros: registros.length,
-    periodoDesde: registros[registros.length-1]?.fecha || '',
-    periodoHasta: registros[0]?.fecha || '',
-    contexto: {
-      finca: 'El Quinche, Pichincha · Sierra ecuatoriana · 3 ha',
-      actividad: 'Aparcería 50/50 · Compra/venta ganado bovino',
-      meta: 'Valle Hermoso/Alluriquín · Angus carne · 2029-2031'
-    },
-    datos: registros,
-    sugerenciasAnalisis: [
-      "¿Qué meses del año históricamente tienen precios más altos para torete?",
-      "¿Cuál es la tendencia general de precios 2022-2026?",
-      "¿Qué categoría (vaca/torete/toro) ha tenido mejor rendimiento de precio?",
-      "¿Cuándo conviene comprar y cuándo conviene vender según estacionalidad?",
-      "¿Cuál es el precio promedio actual vs hace 1 año para cada categoría?",
-      "¿Hay señal de corrección o alza en los próximos 3 meses?"
-    ]
-  };
-  const txt = JSON.stringify(payload, null, 2);
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(txt).then(() => showToast('📋 Precios copiados — pégalos en el chat para análisis')).catch(() => descargarJson(txt));
-  } else descargarJson(txt);
-}
 
 
 

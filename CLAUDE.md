@@ -55,7 +55,10 @@ Este orden es obligatorio y se incumplió varias veces con costo real:
 - El MCP de Drive **lee y crea, pero no reemplaza el contenido** de un archivo existente. Las
   correcciones de datos se hacen con auto-reparación dentro de la app.
 - `script.google.com` está **bloqueado** por el proxy de salida: no se puede escribir a Drive
-  desde aquí por el Apps Script. Los boletines se le entregan al usuario como JSON para importar.
+  desde aquí por el Apps Script. Desde v11 el boletín semanal lo carga el usuario con el botón
+  **📝 Formulario** de Precios (viene lleno con el boletín anterior y él corrige lo que cambió).
+  Solo cuando se atrasa varias semanas manda las capturas y se le entrega un JSON para "Pegar JSON".
+  Se quitaron "Importar JSON" (archivo) y "Exportar datos".
 
 ## Arquitectura
 
@@ -121,10 +124,10 @@ Amarillo = rinde pero caro, o rinde menos que la referencia. **Rojo = solo si no
 
 ## Estado al 8 de noviembre de 2026
 
-Versión publicada: **v10**. Historial reciente: v4 modal bajo el nav · v5 versión visible y
+Versión: **v11** (9-nov-2026, formulario del boletín ASOGAN). Historial reciente: v4 modal bajo el nav · v5 versión visible y
 `preciosLocal` · v6 el simulador explica sus números · v7 % sobre el desembolso y referencia desde
 el historial · v8 diagnóstico al pegar JSON · v9 fasciolicida pasa a Saguaymic Plus · v10 dosis con
-fecha del peso y cálculo en pasos de protocolo.
+fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar.
 
 **Hato El Quinche (4 animales):**
 
