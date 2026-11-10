@@ -357,7 +357,6 @@ tr:hover td{background:rgba(240,232,213,.3);}
     <button class="btn btn-verde" onclick="openVisitaModal()">+ Nueva Visita</button>
   </div>
   <div id="aviso-respaldo"></div>
-  <div id="mercado-banner-visitas"></div>
   <div class="tbl-wrap">
     <table id="visitas-tbl">
       <thead>
@@ -1053,8 +1052,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v11';
-const APP_FECHA = '2026-11-09';
+const APP_VERSION = 'v12';
+const APP_FECHA = '2026-11-10';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -1511,7 +1510,7 @@ function showTab(id, btn) {
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('act'));
   document.getElementById('tab-' + id).classList.add('act');
   if (btn) btn.classList.add('act');
-  if (id === 'visitas') { renderVisitas(); poblarSelectorAnimales('exp-animal', true); renderMercadoBanner(); }
+  if (id === 'visitas') { renderVisitas(); poblarSelectorAnimales('exp-animal', true); }
   else if (id === 'animales') renderAnimales();
   else if (id === 'lotes') { renderLotes(); renderMercadoBanner(); }
   else if (id === 'precios') renderPrecios();
@@ -2036,7 +2035,7 @@ function mktParamsCompra(ci) {
 // ── Banner de mercado (Visitas y Lotes): señal de compra/venta por categoría de interés, desde MKT
 const MKT_CAT_EMOJI = ['🐂','🐃','🥩','🐄','🐮','🐷'];
 function renderMercadoBanner() {
-  const conts = ['mercado-banner-visitas','mercado-banner-lotes'].map(id => document.getElementById(id)).filter(Boolean);
+  const conts = ['mercado-banner-lotes'].map(id => document.getElementById(id)).filter(Boolean);
   if (!conts.length) return;
   const cats = MKT.categoriasInteres();
   const colorKey = k => k === 'ok' ? 'var(--pasto)' : k === 'warn' ? 'var(--sol)' : 'var(--rojo)';

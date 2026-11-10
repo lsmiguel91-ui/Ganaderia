@@ -124,10 +124,10 @@ Amarillo = rinde pero caro, o rinde menos que la referencia. **Rojo = solo si no
 
 ## Estado al 8 de noviembre de 2026
 
-Versión: **v11** (9-nov-2026, formulario del boletín ASOGAN). Historial reciente: v4 modal bajo el nav · v5 versión visible y
+Versión: **v12** (10-nov-2026, sin banner ASOGAN en Visitas). Historial reciente: v4 modal bajo el nav · v5 versión visible y
 `preciosLocal` · v6 el simulador explica sus números · v7 % sobre el desembolso y referencia desde
 el historial · v8 diagnóstico al pegar JSON · v9 fasciolicida pasa a Saguaymic Plus · v10 dosis con
-fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar.
+fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes).
 
 **Hato El Quinche (4 animales):**
 
