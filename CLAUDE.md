@@ -124,10 +124,10 @@ Amarillo = rinde pero caro, o rinde menos que la referencia. **Rojo = solo si no
 
 ## Estado al 8 de noviembre de 2026
 
-Versión: **v12** (10-nov-2026, sin banner ASOGAN en Visitas). Historial reciente: v4 modal bajo el nav · v5 versión visible y
+Versión: **v13** (10-nov-2026, $/lb de compra y guía de edades). Historial reciente: v4 modal bajo el nav · v5 versión visible y
 `preciosLocal` · v6 el simulador explica sus números · v7 % sobre el desembolso y referencia desde
 el historial · v8 diagnóstico al pegar JSON · v9 fasciolicida pasa a Saguaymic Plus · v10 dosis con
-fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes).
+fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes) · v13 guía desplegable de categorías por edad en Lotes, y el $/lb de compra (`compraLbItem`, `lbCompraLote`) en la tarjeta ASOGAN, el análisis, la venta (peso vendido opcional → `pesoVentaLb`) y la fila del lote.
 
 **Hato El Quinche (4 animales):**
 
@@ -146,9 +146,10 @@ fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, 
   destete a partir del 8-dic, que se decide por consumo de concentrado (1 kg/día por 3 días), no
   por fecha. **Atención: 55 kg el 24-oct → 57 kg el 8-nov son 0,13 kg/día, muy por debajo de los
   0,6-0,8 esperados.** Revisar tomas, temperatura, agua y concentrado.
-- **Lote 1** (Santo Domingo): comprado el 31-oct, 12 vacas, $10.000, venta estimada 30-abr-2027,
-  vinculado a Finanzas. **Le falta el peso real** (`pesoLb: null`), sin el cual el análisis del lote
-  no puede calcular nada.
+- **Lote 1** (Santo Domingo): según la hoja de compra, 10 toretes (el usuario confirmó que los 8
+  anotados como "toros" son toretes), 8.916 lb (891,6 lb prom.), $1,26/lb = $11.233 + flete $60 +
+  guías y marcada $30 = $11.323, comprados el 10-nov-2026. El usuario lo está editando en la app;
+  verificar que Finanzas quede con el monto real (tenía $10.000).
 - Boletines ASOGAN cargados hasta el **2-nov-2026**. Falta el del 26-oct. `db.preciosLocal` está
   vacío todavía.
 

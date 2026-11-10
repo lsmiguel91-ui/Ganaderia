@@ -144,6 +144,20 @@ tr:hover td{background:rgba(240,232,213,.3);}
 .asogan-ref-item .lbl{font-size:9px;color:var(--tx3);margin-bottom:2px;}
 .asogan-ref-item .val{font-family:'Playfair Display',serif;font-size:15px;color:var(--tierra);}
 .asogan-ref-note{font-size:10px;color:var(--tx3);margin-top:6px;}
+.asogan-ref-compra{margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.65);border:1px dashed rgba(139,90,43,.35);font-size:11px;color:var(--tx2);line-height:1.5;}
+.asogan-ref-compra strong.v{font-family:'Playfair Display',serif;font-size:15px;color:var(--tierra);}
+.edades{background:white;border:1px solid var(--crema3);border-radius:12px;margin-bottom:12px;overflow:hidden;}
+.edades summary{cursor:pointer;padding:10px 14px;font-size:12px;font-weight:700;color:var(--tierra2);list-style:none;display:flex;justify-content:space-between;align-items:center;}
+.edades summary::-webkit-details-marker{display:none;}
+.edades summary::after{content:'▾';font-size:12px;color:var(--tx3);transition:transform .2s;}
+.edades[open] summary::after{transform:rotate(180deg);}
+.edades-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 12px 10px;}
+.edad-card{background:var(--crema);border-radius:10px;padding:8px 10px;}
+.edad-card .t{font-size:12px;font-weight:800;color:var(--tx);}
+.edad-card .e{font-size:13px;font-weight:700;color:var(--pasto);margin:2px 0;}
+.edad-card .d{font-size:10px;color:var(--tx3);line-height:1.4;}
+.edades-dientes{font-size:10px;color:var(--tx2);padding:0 14px 12px;line-height:1.5;}
+@media(max-width:600px){.edades-grid{grid-template-columns:1fr 1fr;}}
 
 /* LOTE CARD */
 .lote-card{background:var(--card);border:1.5px solid var(--crema3);border-radius:16px;overflow:hidden;margin-bottom:14px;box-shadow:var(--shadow);}
@@ -433,6 +447,18 @@ tr:hover td{background:rgba(240,232,213,.3);}
     <button class="btn btn-verde" onclick="openLoteModal()">+ Nuevo Lote</button>
   </div>
   <div id="mercado-banner-lotes"></div>
+  <details class="edades">
+    <summary>📏 Categorías por edad — ¿ternero, torete, toro, vacona o vaca?</summary>
+    <div class="edades-grid">
+      <div class="edad-card"><div class="t">🐮 Ternero/a</div><div class="e">0 – 12 meses</div><div class="d">Macho o hembra · dientes de leche · hasta el destete y algo después</div></div>
+      <div class="edad-card"><div class="t">🐂 Torete</div><div class="e">1 – 2 años</div><div class="d">Macho entero · sin dientes definitivos o con 2</div></div>
+      <div class="edad-card"><div class="t">🐃 Toro</div><div class="e">más de 2 años</div><div class="d">Macho entero · 4 o más dientes · cuello y giba marcados</div></div>
+      <div class="edad-card"><div class="t">🥩 Novillo</div><div class="e">1½ – 3 años</div><div class="d">Macho castrado · terminado para carne (ASOGAN: novillo gordo)</div></div>
+      <div class="edad-card"><div class="t">🐄 Vacona</div><div class="e">1 – 2½ años</div><div class="d">Hembra que nunca ha parido</div></div>
+      <div class="edad-card"><div class="t">🐄 Vaca</div><div class="e">desde el 1.er parto</div><div class="d">Hembra que ya parió, sin importar la edad</div></div>
+    </div>
+    <div class="edades-dientes">🦷 <strong>Edad por los dientes:</strong> 2 dientes ≈ 2 años · 4 ≈ 2½–3 · 6 ≈ 3–3½ · boca llena ≈ 4 o más</div>
+  </details>
   <div id="lotes-list"></div>
 </div>
 
@@ -929,6 +955,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
       <div class="fg"><label>Fecha de Venta</label><input type="date" id="vl-fecha" onchange="mostrarRefVenta()"></div>
       <div class="fg"><label>Valor Total de Venta ($)</label><input type="number" id="vl-valor" placeholder="15000" step="0.01" oninput="calcVentaPreview()"></div>
     </div>
+    <div class="fg"><label>Peso total vendido (lb) — opcional, para comparar con la compra</label><input type="number" id="vl-peso" placeholder="ej: 10500" step="1" min="0" oninput="calcVentaPreview()" style="max-width:220px;"></div>
     <div id="venta-preview" style="margin-top:8px;"></div>
     <button class="btn btn-verde" style="width:100%;justify-content:center;margin-top:10px;" onclick="guardarVentaLote()">✅ Confirmar Venta</button>
     <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;" onclick="cerrarModal('modal-venta')">Cancelar</button>
@@ -1052,7 +1079,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 const APP_FECHA = '2026-11-10';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -2083,7 +2110,18 @@ function mktIrSimulador(ci) {
   renderAnalisis().then(() => { const t = document.getElementById('an-simulador'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
 
-function htmlRefAsogan(catIndex, fecha) {
+// $/lb pagado (compra pura, sin gastos) — fuente única para el formulario, el análisis y la venta
+function compraLbItem(it) {
+  const c = parseFloat(it && it.cantidad) || 0, p = parseFloat(it && it.pesoLb) || 0, v = parseFloat(it && it.valorCompra) || 0;
+  return (c > 0 && p > 0 && v > 0) ? v / (c * p) : null;
+}
+// Libras compradas del lote: solo si TODOS los ítems tienen peso (si no, el $/lb saldría falso)
+function lbCompraLote(lote) {
+  const items = (lote && lote.items) || [];
+  if (!items.length || items.some(i => !(parseFloat(i.pesoLb) > 0) || !(parseInt(i.cantidad) > 0))) return 0;
+  return items.reduce((s, i) => s + parseInt(i.cantidad) * parseFloat(i.pesoLb), 0);
+}
+function htmlRefAsogan(catIndex, fecha, compraLb) {
   if (catIndex < 0) return '';
   let mesP = fecha ? mesDeStr(fecha) : new Date().getMonth() + 1;
   let anioP = fecha ? parseInt(fecha.split('-')[0]) : new Date().getFullYear();
@@ -2101,6 +2139,13 @@ function htmlRefAsogan(catIndex, fecha) {
       <div class="asogan-ref-item"><div class="lbl">Mínimo</div><div class="val">${hayDatosMes&&dataMes.min?'$'+dataMes.min : (ultimo?.min?'$'+ultimo.min:'—')}</div></div>
     </div>
     <div class="asogan-ref-note">ℹ️ Precio por libra en pie · Solo referencial — el valor real se pacta en campo</div>
+    ${compraLb ? (() => {
+      const mx = hayDatosMes && dataMes.max ? dataMes.max : ultimo?.max;
+      const pr = hayDatosMes && dataMes.prom ? dataMes.prom : ultimo?.prom;
+      const vs = (ref, nom) => ref ? ((compraLb / ref - 1) * 100 >= 0 ? '+' : '') + ((compraLb / ref - 1) * 100).toFixed(1) + '% vs ' + nom : '';
+      return '<div class="asogan-ref-compra">🧾 Tu compra: <strong class="v">$' + compraLb.toFixed(3) + '/lb</strong>'
+        + ([vs(mx, 'máximo'), vs(pr, 'promedio')].filter(Boolean).length ? ' · ' + [vs(mx, 'máximo'), vs(pr, 'promedio')].filter(Boolean).join(' · ') : '') + '</div>';
+    })() : ''}
   </div>`;
 }
 
@@ -3722,6 +3767,10 @@ function renderLotes() {
     }
 
     const tipos = (l.items||[]).map(i=>`${i.cantidad}x ${i.tipo}`).join(', ');
+    // $/lb de compra (y de venta si se registró el peso vendido): dice si la compra fue acertada
+    const lbCompra = lbCompraLote(l);
+    const lbInfo = lbCompra ? '<div style="font-size:10px;color:var(--tx2);">🧾 Compra $' + (getDesgloseCostoLote(l).costoItems / lbCompra).toFixed(3) + '/lb'
+      + (l.pesoVentaLb && l.valorVenta ? ' → venta $' + (l.valorVenta / l.pesoVentaLb).toFixed(3) + '/lb' : '') + '</div>' : '';
     // Fecha venta estimada
     let fventaEst = '—';
     if (l.fventaEst) {
@@ -3743,7 +3792,7 @@ function renderLotes() {
          <button class="btn btn-ghost btn-xs" onclick="abrirSanidadLote(${l.id})" style="margin-right:2px;" title="Sanidad">💉</button>`;
 
     return `<tr>
-      <td><strong style="color:var(--tierra2);">${l.nombre}${esParcial?' <span style="font-size:9px;color:var(--tierra);">◆ parcial</span>':''}</strong><div style="font-size:10px;color:var(--tx3);">${tipos}</div>${l.finanzasVinculo?'<div style="font-size:10px;color:var(--pasto);">🔗 Fondo Finanzas: '+l.finanzasVinculo.desc+'</div>':''}</td>
+      <td><strong style="color:var(--tierra2);">${l.nombre}${esParcial?' <span style="font-size:9px;color:var(--tierra);">◆ parcial</span>':''}</strong><div style="font-size:10px;color:var(--tx3);">${tipos}</div>${lbInfo}${l.finanzasVinculo?'<div style="font-size:10px;color:var(--pasto);">🔗 Fondo Finanzas: '+l.finanzasVinculo.desc+'</div>':''}</td>
       <td style="white-space:nowrap;">${(()=>{const fs=[...new Set((l.items||[]).map(i=>i.fechaCompra).filter(Boolean))].sort();return fs.length>1?fd(fs[0])+'<br><span style="font-size:9px;color:var(--tx3);">+'+fd(fs[fs.length-1])+'</span>':fd(l.fechaCompra);})()}</td>
       <td class="tr"><strong>${fm(costoTotal)}</strong></td>
       <td class="tc">${l.plazoEst ? l.plazoEst+'m' : '—'}</td>
@@ -4258,6 +4307,7 @@ function generarAnalisisLote(loteId) {
 
     // Análisis completo del ítem (para el bloque expandible)
     const analisisHtml = '<div style="font-size:10px;color:var(--tx3);margin-bottom:6px;">Capital: <strong>'+(hayMultiItem?fm(parseFloat(it.valorCompra)||0):fm(capital))+'</strong> · Precio ref. actual: <strong>$'+pActual.toFixed(3)+'/lb</strong>'+(pesoIt?' · Peso compra: <strong>'+(pesoIt).toLocaleString()+' lb</strong>':'')+'</div>'
+      +(compraLbItem(it)?'<div style="font-size:11px;color:var(--tx2);margin-bottom:6px;">🧾 Compraste a <strong>$'+compraLbItem(it).toFixed(3)+'/lb</strong>'+(cantTotal&&pesoIt?' · costo hasta hoy (compra + gastos): <strong>$'+(costoEfectivo/(cantTotal*pesoIt)).toFixed(3)+'/lb</strong>':'')+(lote.pesoVentaLb&&lote.valorVenta?' · vendiste a <strong>$'+(lote.valorVenta/lote.pesoVentaLb).toFixed(3)+'/lb</strong>':'')+'</div>':'')
       +(esParcial?'<div style="font-size:10px;color:var(--pasto);margin-bottom:8px;">✓ Ya vendido de este ítem: <strong>'+fm(ingresoEfectivo)+'</strong> ('+vendIt+' cab.) — proyectando '+pendIt+' pendientes</div>':'')
       +proyeccionHtml
       +precioMinHtml
@@ -4513,10 +4563,10 @@ function agregarItemLote(item=null) {
         </select>
       </div>
       <div class="fg" style="margin:0;"><label style="font-size:9px;">Cant.</label>
-        <input type="number" id="li-cant-${n}" value="${item?.cantidad||''}" placeholder="10" min="1">
+        <input type="number" id="li-cant-${n}" value="${item?.cantidad||''}" placeholder="10" min="1" oninput="actualizarRefItem(${n})">
       </div>
       <div class="fg" style="margin:0;"><label style="font-size:9px;">Valor Compra ($)</label>
-        <input type="number" id="li-val-${n}" value="${item?.valorCompra||''}" placeholder="10000" step="0.01">
+        <input type="number" id="li-val-${n}" value="${item?.valorCompra||''}" placeholder="10000" step="0.01" oninput="actualizarRefItem(${n})">
       </div>
       <div class="fg" style="margin:0;"><label style="font-size:9px;">Descripción</label>
         <input type="text" id="li-desc-${n}" value="${item?.desc||''}" placeholder="ej: 10 toros engorde">
@@ -4531,12 +4581,12 @@ function agregarItemLote(item=null) {
       <div class="fg" style="margin:0;">
         <label style="font-size:9px;">Peso prom. por animal (lb) — opcional</label>
         <input type="number" id="li-peso-lb-${n}" value="${pesoLbItem}" placeholder="ej: 741" min="0" step="1"
-          oninput="const kg=this.value?Math.round(this.value/2.205):'';document.getElementById('li-peso-kg-${n}').value=kg;">
+          oninput="const kg=this.value?Math.round(this.value/2.205):'';document.getElementById('li-peso-kg-${n}').value=kg;actualizarRefItem(${n});">
       </div>
       <div class="fg" style="margin:0;">
         <label style="font-size:9px;">Si no sabes en lb: kg</label>
         <input type="number" id="li-peso-kg-${n}" value="${pesoKgItem}" placeholder="kg" min="0" step="1"
-          oninput="const lb=this.value?Math.round(this.value*2.205):'';document.getElementById('li-peso-lb-${n}').value=lb;">
+          oninput="const lb=this.value?Math.round(this.value*2.205):'';document.getElementById('li-peso-lb-${n}').value=lb;actualizarRefItem(${n});">
       </div>
     </div>
     <div id="li-ref-${n}" style="margin-top:6px;"></div>
@@ -4581,7 +4631,12 @@ function actualizarRefItem(n) {
   if (!sel || !refEl) return;
   const catIdx = getCatIndex(sel.value);
   if (catIdx >= 0) {
-    refEl.innerHTML = htmlRefAsogan(catIdx, fecha);
+    const compraLb = compraLbItem({
+      cantidad: document.getElementById('li-cant-' + n)?.value,
+      valorCompra: document.getElementById('li-val-' + n)?.value,
+      pesoLb: document.getElementById('li-peso-lb-' + n)?.value
+    });
+    refEl.innerHTML = htmlRefAsogan(catIdx, fecha, compraLb);
   } else {
     refEl.innerHTML = '';
   }
@@ -4663,8 +4718,10 @@ function abrirModalVenta(id) {
   document.getElementById('vl-lote-id').value = id;
   document.getElementById('vl-fecha').value = hoy();
   document.getElementById('vl-valor').value = '';
+  document.getElementById('vl-peso').value = '';
   document.getElementById('venta-preview').innerHTML = '';
   document.getElementById('asogan-venta-ref').innerHTML = '';
+  mostrarRefVenta();
   document.getElementById('modal-venta').classList.add('open');
 }
 function mostrarRefVenta() {
@@ -4674,7 +4731,9 @@ function mostrarRefVenta() {
   const tipo = lote.items[0].tipo;
   const fecha = document.getElementById('vl-fecha').value;
   const catIdx = getCatIndex(tipo);
-  document.getElementById('asogan-venta-ref').innerHTML = htmlRefAsogan(catIdx, fecha);
+  const lbC = lbCompraLote(lote);
+  const compraLb = lbC ? getDesgloseCostoLote(lote).costoItems / lbC : null;
+  document.getElementById('asogan-venta-ref').innerHTML = htmlRefAsogan(catIdx, fecha, compraLb);
 }
 function calcVentaPreview() {
   const id = parseInt(document.getElementById('vl-lote-id').value);
@@ -4687,11 +4746,15 @@ function calcVentaPreview() {
   const dias = diasEntre(lote.fechaCompra, document.getElementById('vl-fecha').value||hoy());
   const meses = dias / 30.44;
   const tasaMes = meses > 0 && d.capitalLM > 0 ? (utilidadLM/d.capitalLM/meses*100).toFixed(2) : '—';
+  const pesoV = parseFloat(document.getElementById('vl-peso').value)||0;
+  const lbC = lbCompraLote(lote);
+  const lineaLb = pesoV > 0 ? '<div style="font-size:11px;color:var(--tx2);margin-top:8px;line-height:1.5;">💲 Vendes a <strong>$' + (venta/pesoV).toFixed(3) + '/lb</strong>'
+    + (lbC ? ' · compraste a <strong>$' + (d.costoItems/lbC).toFixed(3) + '/lb</strong> · costo total <strong>$' + (d.costoTotal/lbC).toFixed(3) + '/lb</strong> comprada · ganaron <strong>' + Math.round(pesoV - lbC).toLocaleString() + ' lb</strong>' : '') + '</div>' : '';
   document.getElementById('venta-preview').innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;background:rgba(74,124,63,.08);border-radius:10px;">
     <div style="text-align:center;"><div style="font-size:10px;color:var(--tx3);">Días en finca</div><div style="font-family:'Playfair Display',serif;font-size:18px;">${dias}</div></div>
     <div style="text-align:center;"><div style="font-size:10px;color:var(--tx3);">Tu utilidad (50%)</div><div style="font-family:'Playfair Display',serif;font-size:18px;color:${utilidadLM>=0?'var(--pasto)':'var(--rojo)'};">${fm(utilidadLM)}</div></div>
     <div style="text-align:center;"><div style="font-size:10px;color:var(--tx3);">Tasa/mes</div><div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--tierra);">${tasaMes}%</div></div>
-  </div>`;
+  </div>${lineaLb}`;
 }
 async function guardarVentaLote() {
   const id = parseInt(document.getElementById('vl-lote-id').value);
@@ -4701,6 +4764,7 @@ async function guardarVentaLote() {
   if (valor <= 0) { showToast('⚠️ Ingresa el valor de venta'); return; }
   lote.fechaVenta = document.getElementById('vl-fecha').value||hoy();
   lote.valorVenta = valor;
+  lote.pesoVentaLb = parseFloat(document.getElementById('vl-peso').value) || null;
   cerrarModal('modal-venta'); renderLotes(); await save();
   showToast('✅ Venta registrada — sincronizando con Finanzas...');
   syncToFinanzasSilente();
