@@ -1079,7 +1079,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 const APP_FECHA = '2026-11-14';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -2331,7 +2331,7 @@ function getAlertasSanidadTodas() {
 }
 
 // ── Excepciones de Sanidad: vacunas que aplica la brigada oficial (global) y omisiones por animal
-const SAN_EXTERNO_OPCIONAL = ['aftosa','brucelos']; // ítems que pueden marcarse "Lo aplica AGROCALIDAD/MAG"
+const SAN_EXTERNO_OPCIONAL = ['aftosa','brucelos','carbunco']; // ítems que pueden marcarse "Lo aplica AGROCALIDAD/MAG"
 const SAN_EXTERNO_LABEL = 'AGROCALIDAD/MAG';
 const SAN_MOTIVOS_OMISION = { externo: 'lo aplica AGROCALIDAD/MAG/veterinario', decision: 'decidí no aplicar' };
 function sanEsExterno(protId) {
@@ -2363,6 +2363,8 @@ function getSanPendientes() {
       // Vacuna/antiparasitario/vitamina de dosis única → vive en db.vacunas con protId
       const vacAnimal = (db.vacunas||[]).filter(v => String(v.animalId) === String(a.id) && v.protId === item.id);
       const yaEnCola = vacAnimal.some(v => !v.fechaCumplida);
+      // Una sola vez en la vida (brucelosis): si ya está puesta alguna vez, no vuelve a alertar nunca
+      if (item.unaVez && vacAnimal.some(v => v.fechaCumplida)) return;
       const yaCumplidaEsteMes = vacAnimal.some(v => {
         if (!v.fechaCumplida) return false;
         const f = new Date(v.fechaCumplida + 'T12:00:00');
@@ -2403,6 +2405,9 @@ function getSanPendientes() {
         const diasVida = Math.floor((hoyD - parseFechaLocal(a.fnac)) / 86400000);
         if (diasVida >= SAN_RESPIRATORIA_DESDE_DIAS && diasVida <= SAN_RESPIRATORIA_HASTA_DIAS) registrar(item, a);
       });
+    } else if (item.id === 'brucelos') {
+      // Ventana de edad, no mes del calendario: sanAplica ya exige hembra de 3 a 8 meses
+      anim.forEach(a => { if (sanAplica(item, a) && a.fnac) registrar(item, a); });
     } else if (item.id === 'preparto') {
       anim.forEach(a => {
         if (!sanAplica(item, a) || a.estadoRepro !== 'prenada' || !a.fechaParto || a.fechaPartoReal) return;
@@ -6073,11 +6078,18 @@ async function marcarVacunaCumplida(vacId) {
       dosis: vac.dosis,
       via: vac.via,
       quien: vac.quien,
-      intervalo: vac.intervalo,
+      // La serie inicial son dos dosis: el refuerzo ya no encadena otro, vuelve al ciclo normal de la planilla
+      intervalo: vac.esRefuerzoInicial ? null : vac.intervalo,
+      esRefuerzoInicial: false,
       fechaProgram: addDias(fechaReal, vac.intervalo),
       fechaCumplida: null,
       nota: vac.nota
     });
+    if (vac.esRefuerzoInicial) {
+      const ult = db.vacunas[db.vacunas.length - 1];
+      ult.nombre = String(vac.nombre).replace(' · 1ª dosis','') + ' · Refuerzo inicial';
+      ult.nota = 'Segunda dosis de la serie inicial. Después de ésta, sigue el ciclo normal de cada 6 meses.';
+    }
   }
   renderListaVacunas(vac.animalId);
   renderAnimales();
@@ -7574,26 +7586,26 @@ const PLANILLA_ANUAL = [
    desc:'OBLIGATORIA AGROCALIDAD. Agitar bien antes. NO mezclar en misma jeringa con bacterinas.',
    dosis:'2 ml', via:'SC — bajo piel cuello o detrás del codo', quien:'tú mismo'},
   {id:'brucelos',  nombre:'Brucelosis RB51',            tipo:'vacuna-ob', cat:'💉 Vacunas Obligatorias',
-   meses:[3],     aplica:'hembra_3_8m', intervaloLabel:'Una vez en la vida (3–8 meses edad)',
-   desc:'SOLO hembras entre 3 y 8 meses de edad. Una vez en la vida. NUNCA en gestación. Requiere veterinario autorizado.',
+   meses:null, unaVez:true, aplica:'hembra_3_8m', intervaloLabel:'Una vez en la vida (3–8 meses edad)',
+   desc:'SOLO hembras entre 3 y 8 meses de edad. Una vez en la vida. NUNCA en gestación. Requiere veterinario autorizado. La alerta sale mientras la ternera esté dentro de esa ventana de edad, no en un mes fijo: si nace en mayo, la ventana va de agosto a enero y ahí se avisa.',
    dosis:'2 ml', via:'SC — dosis única', quien:'veterinario'},
   // VACUNAS RECOMENDADAS
   {id:'carbunco',  nombre:'Carbunco Sintomático',       tipo:'vacuna-rec', cat:'🛡️ Vacunas Recomendadas',
-   meses:[3,9],   aplica:'todos',   edadMinDias:90, intervaloLabel:'Cada 6 meses (desde los 3 meses de edad)',
-   desc:'Muerte súbita bacteriana. Mismo día que Clostridiosis. Jeringa separada de Aftosa. Primera vez desde los 3 meses de edad, con refuerzo a las 3–4 semanas.',
+   meses:[3,9],   aplica:'todos',   edadMinDias:90, refuerzoInicialDias:28, intervaloLabel:'Cada 6 meses (desde los 3 meses de edad)',
+   desc:'OJO antes de comprar: el carbunco SINTOMÁTICO (pierna negra) es Clostridium chauvoei y ya viene dentro de la clostridial de 8 cepas — poner las dos es pagar dos veces lo mismo. El que NO está en la polivalente es el carbunco BACTERIDIANO (ántrax), otra enfermedad, que suele ir en campaña oficial junto con la aftosa; para ése está el botón de brigada. Jeringa separada de Aftosa. La primera vez lleva refuerzo a las 3–4 semanas y la app lo agenda solo.',
    dosis:'2 ml', via:'SC — bajo piel cuello', quien:'tú mismo'},
   {id:'clostri',   nombre:'Clostridiosis (Bovisan 8+)', tipo:'vacuna-rec', cat:'🛡️ Vacunas Recomendadas',
-   meses:[3,9],   aplica:'todos',   edadMinDias:90, intervaloLabel:'Cada 6 meses (desde los 3 meses de edad)',
-   desc:'8 cepas de Clostridium. Primera vez desde los 3 meses de edad, con refuerzo a las 3–4 semanas. En vacas gestantes: refuerzo 30–45 días antes del parto. Mismo día Carbunco.',
+   meses:[3,9],   aplica:'todos',   edadMinDias:90, refuerzoInicialDias:28, intervaloLabel:'Cada 6 meses (desde los 3 meses de edad)',
+   desc:'8 cepas de Clostridium: enterotoxemia, pierna negra y edema maligno. Es la vacuna que más muertes súbitas evita en terneros a pastoreo, y ya cubre el carbunco sintomático, así que no hace falta comprar ésa aparte. Primera vez desde los 3 meses CON REFUERZO a las 3–4 semanas: con una sola dosis casi no protege; la app lo agenda solo. En vacas gestantes: refuerzo 30–45 días antes del parto. Si no la encuentras por ese nombre, pide bacterina polivalente clostridial de 8 o 10 cepas.',
    dosis:'5 ml', via:'SC — bajo piel cuello', quien:'tú mismo'},
   {id:'ibr',       nombre:'IBR/DVB/Leptospira',         tipo:'vacuna-rec', cat:'🛡️ Vacunas Recomendadas',
-   meses:[2],     aplica:'hembra',  intervaloLabel:'Anual — 30–60d antes temporada servicio',
-   desc:'Previene abortos y pérdidas reproductivas. Solo hembras. Aplicar antes de la temporada de servicio.',
+   meses:null,    aplica:'hembra',  intervaloLabel:'Anual — 30–60d antes temporada servicio',
+   desc:'Previene abortos y pérdidas reproductivas. Solo hembras. Es la que cubre los virus IBR y DVB, que la bacterina respiratoria NO cubre. La alerta aparece en la ficha de cada hembra cuando faltan 60 días o menos para su servicio estimado, no en un mes fijo: una vacuna reproductiva se pone antes de preñar y eso depende del ciclo de cada vaca.',
    dosis:'5 ml', via:'SC o IM según prospecto', quien:'veterinario'},
   // ANTIPARASITARIOS
   {id:'iverm',     nombre:'Ivermectina 1%',             tipo:'antipar', cat:'🐛 Antiparasitarios',
-   meses:[1,4,7,10], aplica:'todos', edadMinDias:60, kgPorMl:50, intervaloLabel:'Cada 90 días (desde los 2 meses de edad)',
-   desc:'Parásitos internos y externos. No antes de los 2 meses de edad (antes: desparasitante oral pediátrico). RETIRO: 42 días antes de faena / 28 días antes de ordeño.',
+   meses:[2,8],   aplica:'todos', edadMinDias:60, kgPorMl:50, intervaloLabel:'Febrero y agosto — alternando con el fasciolicida',
+   desc:'Parásitos internos y externos. Va en FEBRERO y AGOSTO, intercalada con el fasciolicida de mayo y noviembre: entre los dos el animal queda desparasitado cuatro veces al año sin repetir principio activo. Antes estaba cada 90 días, que en adultos a pastoreo es más de lo necesario y acelera la resistencia, y encima el fasciolicida trae fenbendazol y cubre los mismos nematodos. No antes de los 2 meses de edad (antes: desparasitante oral pediátrico). RETIRO: 42 días antes de faena / 28 días antes de ordeño.',
    dosis:'1 ml por cada 50 kg de peso', via:'SC — tabla del cuello', quien:'tú mismo'},
   {id:'fasciol',   nombre:'Fasciolicida — Saguaymic Plus (triclabendazol 10% + fenbendazol 10%)', tipo:'antipar', cat:'🐛 Antiparasitarios',
    meses:[5,11],  aplica:'todos',   edadMinDias:90, kgPorMl:8.333, intervaloLabel:'Cada 6 meses — inicio y fin época lluviosa (desde los 3 meses)',
@@ -7687,7 +7699,12 @@ function sanAplica(item, animal) {
   if (ap === 'macho') return sanEsMacho(animal);
   if (ap === 'ternero') return sanEsTernero(animal);
   if (ap === 'hembra_3_8m') {
-    if (!sanEsHembra(animal)) return false;
+    // BUG corregido (nov-2026): sanEsHembra solo cuenta 'vaca' y 'vacona', así que una TERNERA
+    // —que es justo a quien va la Brucelosis RB51— nunca calificaba y la alerta no salía nunca.
+    const esHembraJoven = sanEsHembra(animal) ||
+      (animal.tipo || '').toLowerCase() === 'ternera' ||
+      (animal.sexo || '').toLowerCase() === 'hembra';
+    if (!esHembraJoven) return false;
     const em = animal.fnac ? Math.floor((new Date()-parseFechaLocal(animal.fnac))/(1000*60*60*24*30.44)) : 24;
     return em >= 3 && em <= 8;
   }
@@ -7851,12 +7868,19 @@ async function sanAsignarVacuna(protId, animalId, enLote) {
   // Buscar si ya tiene pendiente
   const yaTiene = db.vacunas.some(v=>String(v.animalId)===String(a.id)&&v.protId===protId&&!v.fechaCumplida);
   if(yaTiene){ if(!enLote){showToast('Ya tiene '+item.nombre+' pendiente'); sanPlanillaAnual();} return false;}
+  // Primera vez de una vacuna que necesita serie inicial (clostridial, carbunco):
+  // se marca para que al cumplirla quede agendado el refuerzo de 3-4 semanas.
+  const esPrimeraVez = !!item.refuerzoInicialDias &&
+    !db.vacunas.some(v => String(v.animalId)===String(a.id) && v.protId===protId && v.fechaCumplida);
   db.vacunas.push({
     id:Date.now()+Math.random(),
     animalId:a.id, protId:item.id,
-    nombre:item.nombre, dosis:sanDosis(item, a), via:item.via,
-    quien:item.quien, intervalo:null,
-    fechaProgram:hoy(), fechaCumplida:null, nota:item.desc
+    nombre:item.nombre + (esPrimeraVez ? ' · 1ª dosis' : ''),
+    dosis:sanDosis(item, a), via:item.via,
+    quien:item.quien, intervalo: esPrimeraVez ? item.refuerzoInicialDias : null,
+    esRefuerzoInicial: esPrimeraVez,
+    fechaProgram:hoy(), fechaCumplida:null,
+    nota: esPrimeraVez ? 'PRIMERA VEZ: con una sola dosis casi no protege. Al marcarla cumplida queda agendado el refuerzo a los ' + item.refuerzoInicialDias + ' días. ' + item.desc : item.desc
   });
   if (enLote) return true;
   guardarLocal(); await save();
