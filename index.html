@@ -1079,7 +1079,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 const APP_FECHA = '2026-11-14';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -6110,6 +6110,10 @@ function mvCambiarTab(tab) {
 // ══════════════════════════════════════════════════════
 //  CATÁLOGO DE PROTOCOLOS
 // ══════════════════════════════════════════════════════
+// Producto respiratorio en uso: lo consumen el catálogo de protocolos y las fichas sueltas.
+const RESP_PRODUCTO = 'NEUMOBAC (bacterina) 5 mL — ternero · SUBCUTÁNEA';
+const RESP_VIA      = 'SC — tabla del cuello';
+const RESP_MODO     = 'SC en la tabla del cuello, levantando el pliegue de piel: NO intramuscular. Aguja 18-20G x 1". Agitar bien el frasco antes de cargar. Mantener refrigerado 2-8 °C, nunca congelar.';
 const CATALOGO_PROTOCOLOS = [
   {
     id: 'neonatal',
@@ -6128,15 +6132,16 @@ const CATALOGO_PROTOCOLOS = [
   },
   {
     id: 'respiratoria',
-    nombre: 'Vacuna Respiratoria · Complejo Respiratorio Bovino',
+    nombre: 'Vacuna Respiratoria · NEUMOBAC (bacterina)',
+    nombresPrev: ['Vacuna Respiratoria · Complejo Respiratorio Bovino'],
     emoji: '🫁',
     categoria: 'Crianza',
     aplica: ['ternero','ternera'],
     descripcion: 'Producto en uso desde nov-2026: NEUMOBAC (James Brown), bacterina contra neumoenteritis — Pasteurella multocida, P. haemolytica, E. coli y Salmonella. Cubre la parte BACTERIANA del Complejo Respiratorio Bovino, que es la que remata la neumonía, pero NO los virus que lo inician (IBR, DVB, PI3, BRSV): para ésos hace falta una vacuna viral aparte. Serie inicial de 2 dosis; refuerzo anual después.',
     nota: '💡 Después de esta serie inicial, revacunar anualmente (registrar como nuevo tratamiento con intervalo de 365 días).',
     pasos: [
-      { dia: 0,  nombre: 'Respiratoria · 1ª dosis (D60 de vida aprox.)', productos: 'NEUMOBAC (bacterina) 5 mL — ternero · SUBCUTÁNEA', modo: 'SC en la tabla del cuello, levantando el pliegue de piel: NO intramuscular. Aguja 18-20G x 1". Agitar bien el frasco antes de cargar (sedimenta). Mantener refrigerado 2-8 °C, nunca congelar. Confirmar dosis e intervalo en la etiqueta del frasco.', intervalo: 21 },
-      { dia: 21, nombre: 'Respiratoria · Refuerzo',                     productos: 'NEUMOBAC (bacterina) 5 mL — ternero · SUBCUTÁNEA', modo: 'SC en la tabla del cuello, lado contrario a la dosis anterior. Sin esta 2ª dosis la bacterina casi no protege. Fin de la serie inicial — continuar con refuerzo anual.', intervalo: null },
+      { dia: 0,  nombre: 'Respiratoria · 1ª dosis (D60 de vida aprox.)', productos: RESP_PRODUCTO, modo: 'SC en la tabla del cuello, levantando el pliegue de piel: NO intramuscular. Aguja 18-20G x 1". Agitar bien el frasco antes de cargar (sedimenta). Mantener refrigerado 2-8 °C, nunca congelar. Confirmar dosis e intervalo en la etiqueta del frasco.', intervalo: 21 },
+      { dia: 21, nombre: 'Respiratoria · Refuerzo',                     productos: RESP_PRODUCTO, modo: 'SC en la tabla del cuello, lado contrario a la dosis anterior. Sin esta 2ª dosis la bacterina casi no protege. Fin de la serie inicial — continuar con refuerzo anual.', intervalo: null },
     ]
   },
   {
@@ -6340,13 +6345,13 @@ async function borrarTratamiento(id) {
 // (arregla datos generados antes del fix de ordenamiento por dia en marcarTratamientoCumplido)
 function repararSecuenciaProtocolos(animalId) {
   if (!db.tratamientos) return false;
-  let huboCambios = false;
+  let huboCambios = repararProductoRespiratoria();
   // 0) Revincular fichas que perdieron protocoloId (edición antigua) usando obs "Protocolo: <nombre>" + nombre del paso
   db.tratamientos.forEach(t => {
     if (String(t.animalId) !== String(animalId) || t.protocoloId) return;
     const m = /^Protocolo:\s*(.+)$/.exec(t.obs || '');
     if (!m) return;
-    const cat = CATALOGO_PROTOCOLOS.find(p => p.nombre === m[1].trim());
+    const cat = CATALOGO_PROTOCOLOS.find(p => p.nombre === m[1].trim() || (p.nombresPrev || []).includes(m[1].trim()));
     if (!cat) return;
     const paso = cat.pasos.find(p => p.nombre === t.nombre);
     if (!paso) return;
@@ -6445,6 +6450,22 @@ function renderListaTratamientos(animalId) {
   }).join('');
 }
 
+// Producto respiratorio en uso (nov-2026). Al cambiar de producto se edita aquí y las fichas
+// PENDIENTES se actualizan solas; las cumplidas conservan el texto con el que se aplicaron.
+// Reescribe el producto de las fichas respiratorias pendientes que quedaron con el texto viejo.
+// Solo toca las que siguen nombrando el producto anterior, así nunca pisa una edición manual.
+function repararProductoRespiratoria() {
+  let cambios = false;
+  (db.tratamientos || []).forEach(t => {
+    if (t.fechaCumplida) return;
+    const esResp = t.protocoloId === 'respiratoria' || /^Respiratoria ·/.test(t.nombre || '');
+    if (!esResp) return;
+    if (!/CRB|combinada/i.test(t.dosis || '')) return;
+    t.dosis = RESP_PRODUCTO; t.via = RESP_VIA; t.modo = RESP_MODO;
+    cambios = true;
+  });
+  return cambios;
+}
 // CRB: si la 1ª dosis se aplicó antes de los 55 días de vida (interferencia de anticuerpos maternos),
 // agenda una dosis adicional a los ~140 días de edad. Devuelve cuántas fichas creó.
 const CRB_DOSIS_ADIC_EDAD_DIAS = 140;
@@ -6466,9 +6487,9 @@ function crbAgendarDosisAdicional(animalId) {
       animalId: a.id,
       protocoloId: null,
       nombre: 'Respiratoria · Dosis adicional',
-      dosis: 'Vacuna respiratoria combinada (CRB) IM (anca)',
-      via: 'IM — músculo del anca',
-      modo: 'Anca, aguja 18-20G x 1", aspirar antes. Alternar lado respecto a la dosis anterior.',
+      dosis: RESP_PRODUCTO,
+      via: RESP_VIA,
+      modo: RESP_MODO + ' Alternar lado respecto a la dosis anterior.',
       intervalo: null,
       fechaAplicacion: addDias(a.fnac, CRB_DOSIS_ADIC_EDAD_DIAS),
       fechaProxima: null,
@@ -6511,7 +6532,7 @@ async function marcarTratamientoCumplido(id) {
         animalId: t.animalId,
         protocoloId: null,
         nombre: 'Respiratoria · Revacunación Anual',
-        dosis: 'Vacuna respiratoria combinada (CRB) IM (anca)',
+        dosis: RESP_PRODUCTO,
         via: 'IM — músculo del anca',
         modo: 'Confirmar producto con el veterinario. Anca, aguja 18-20G x 1", aspirar antes. Alternar lado respecto al año anterior.',
         intervalo: 365,
@@ -7610,7 +7631,7 @@ const PLANILLA_ANUAL = [
    meses:null,    aplica:'ternero', intervaloLabel:'Al nacimiento — 4 dosis hasta D30',
    desc:'Arranque inmunológico desde el nacimiento. Calostro D0 + yodo en ombligo, ADE D1, desparasitante D15, refuerzo D30.',
    dosis:'Ver protocolo detallado', via:'Ver guía', quien:'tú mismo'},
-  {id:'respiratoria', nombre:'Vacuna Respiratoria (CRB)', tipo:'trat', cat:'💊 Tratamientos',
+  {id:'respiratoria', nombre:'Vacuna Respiratoria — NEUMOBAC', tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'ternero', intervaloLabel:'~60 días de vida — serie de 2 dosis, luego refuerzo anual',
    desc:'Producto en uso: NEUMOBAC (bacterina) — cubre Pasteurella multocida, P. haemolytica, E. coli y Salmonella, o sea la parte bacteriana del Complejo Respiratorio Bovino, no los virus (IBR, DVB, PI3, BRSV). 1ª dosis ~60 días, refuerzo 21 días después; sin la 2ª dosis casi no protege.',
    dosis:'5 mL por ternero (ver etiqueta)', via:'Subcutánea — tabla del cuello', quien:'tú mismo'},
