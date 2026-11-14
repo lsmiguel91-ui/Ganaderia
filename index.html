@@ -1079,8 +1079,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v13';
-const APP_FECHA = '2026-11-10';
+const APP_VERSION = 'v14';
+const APP_FECHA = '2026-11-14';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -6132,11 +6132,11 @@ const CATALOGO_PROTOCOLOS = [
     emoji: '🫁',
     categoria: 'Crianza',
     aplica: ['ternero','ternera'],
-    descripcion: 'Previene el Complejo Respiratorio Bovino (IBR, DVB, PI3, BRSV + Mannheimia/Pasteurella). Serie inicial de 2 dosis; refuerzo anual después.',
+    descripcion: 'Producto en uso desde nov-2026: NEUMOBAC (James Brown), bacterina contra neumoenteritis — Pasteurella multocida, P. haemolytica, E. coli y Salmonella. Cubre la parte BACTERIANA del Complejo Respiratorio Bovino, que es la que remata la neumonía, pero NO los virus que lo inician (IBR, DVB, PI3, BRSV): para ésos hace falta una vacuna viral aparte. Serie inicial de 2 dosis; refuerzo anual después.',
     nota: '💡 Después de esta serie inicial, revacunar anualmente (registrar como nuevo tratamiento con intervalo de 365 días).',
     pasos: [
-      { dia: 0,  nombre: 'Respiratoria · 1ª dosis (D60 de vida aprox.)', productos: 'Vacuna respiratoria combinada (CRB) IM (anca)', modo: 'Confirmar producto con el veterinario según disponibilidad local. Anca, aguja 18-20G x 1", aspirar antes.', intervalo: 24 },
-      { dia: 24, nombre: 'Respiratoria · Refuerzo',                     productos: 'Vacuna respiratoria combinada (CRB) IM (anca)', modo: 'Anca lado contrario a la dosis anterior. Fin de la serie inicial — continuar con refuerzo anual.', intervalo: null },
+      { dia: 0,  nombre: 'Respiratoria · 1ª dosis (D60 de vida aprox.)', productos: 'NEUMOBAC (bacterina) 5 mL — ternero · SUBCUTÁNEA', modo: 'SC en la tabla del cuello, levantando el pliegue de piel: NO intramuscular. Aguja 18-20G x 1". Agitar bien el frasco antes de cargar (sedimenta). Mantener refrigerado 2-8 °C, nunca congelar. Confirmar dosis e intervalo en la etiqueta del frasco.', intervalo: 21 },
+      { dia: 21, nombre: 'Respiratoria · Refuerzo',                     productos: 'NEUMOBAC (bacterina) 5 mL — ternero · SUBCUTÁNEA', modo: 'SC en la tabla del cuello, lado contrario a la dosis anterior. Sin esta 2ª dosis la bacterina casi no protege. Fin de la serie inicial — continuar con refuerzo anual.', intervalo: null },
     ]
   },
   {
@@ -7612,8 +7612,8 @@ const PLANILLA_ANUAL = [
    dosis:'Ver protocolo detallado', via:'Ver guía', quien:'tú mismo'},
   {id:'respiratoria', nombre:'Vacuna Respiratoria (CRB)', tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'ternero', intervaloLabel:'~60 días de vida — serie de 2 dosis, luego refuerzo anual',
-   desc:'Previene el Complejo Respiratorio Bovino (IBR, DVB, PI3, BRSV + bacterias). 1ª dosis ~60 días, refuerzo 24 días después.',
-   dosis:'Ver protocolo detallado', via:'Ver guía', quien:'veterinario'},
+   desc:'Producto en uso: NEUMOBAC (bacterina) — cubre Pasteurella multocida, P. haemolytica, E. coli y Salmonella, o sea la parte bacteriana del Complejo Respiratorio Bovino, no los virus (IBR, DVB, PI3, BRSV). 1ª dosis ~60 días, refuerzo 21 días después; sin la 2ª dosis casi no protege.',
+   dosis:'5 mL por ternero (ver etiqueta)', via:'Subcutánea — tabla del cuello', quien:'tú mismo'},
 ];
 
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
