@@ -1,6 +1,6 @@
 # Bitácora Ganadera — contexto para Claude Code
 
-Actualizado: 8 de noviembre de 2026. Mantén este archivo al día cuando cambies algo estructural.
+Actualizado: 15 de noviembre de 2026. Mantén este archivo al día cuando cambies algo estructural.
 
 ## Qué es esto
 
@@ -122,48 +122,50 @@ Amarillo = rinde pero caro, o rinde menos que la referencia. **Rojo = solo si no
 - Las **vacunas no se dosifican por peso**; los antiparasitarios y vitaminas sí. `sanDosis` y
   `dosisConPeso` calculan los ml y **siempre muestran de qué fecha es el peso**.
 
-## Estado al 8 de noviembre de 2026
+## Estado al 15 de noviembre de 2026
 
-Versión: **v13** (10-nov-2026, $/lb de compra y guía de edades). Historial reciente: v4 modal bajo el nav · v5 versión visible y
+Versión: **v16** (14-nov-2026; v14-v16 se hicieron desde claude.ai con la PC apagada). Historial reciente: v4 modal bajo el nav · v5 versión visible y
 `preciosLocal` · v6 el simulador explica sus números · v7 % sobre el desembolso y referencia desde
 el historial · v8 diagnóstico al pegar JSON · v9 fasciolicida pasa a Saguaymic Plus · v10 dosis con
-fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes) · v13 guía desplegable de categorías por edad en Lotes, y el $/lb de compra (`compraLbItem`, `lbCompraLote`) en la tarjeta ASOGAN, el análisis, la venta (peso vendido opcional → `pesoVentaLb`) y la fila del lote.
+fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes) · v13 guía desplegable de categorías por edad en Lotes, y el $/lb de compra (`compraLbItem`, `lbCompraLote`) en la tarjeta ASOGAN, el análisis, la venta (peso vendido opcional → `pesoVentaLb`) y la fila del lote. · v14 el protocolo respiratorio pasa a NEUMOBAC (bacterina, SC, 5 mL, refuerzo a 21 días; NO cubre IBR/DVB/PI3/BRSV) · v15 producto centralizado en `RESP_PRODUCTO`/`RESP_VIA`/`RESP_MODO` y `repararProductoRespiratoria()` · v16 auditoría de sanidad (brucelosis por edad incluyendo terneras, clostridial en serie de 2 dosis, ivermectina feb/ago intercalada con el fasciolicida may/nov).
 
 **Hato El Quinche (4 animales):**
 
-| Animal | Categoría | Edad | Último peso |
-|---|---|---|---|
-| Manchas | vaca | — | 440 kg (26-jun-2026) — desactualizado, y el usuario dice que bajó |
-| Taurus | torete | 465 d | 285 kg (1-nov-2026), escrotal 28 cm, GDP real 0,33 kg/día |
-| Hunter | ternero | 113 d | **33 kg (nacimiento)** — sin pesar desde que nació; se estima ~100 kg |
-| Normando 2 | ternero | 40 d | 57 kg (8-nov-2026) |
+| Animal | Categoría | Último peso |
+|---|---|---|
+| Manchas | vaca | 440 kg (26-jun-2026) — desactualizado, el usuario dice que bajó |
+| Taurus | torete | 280 kg CC 3,3 (14-nov); el registro del 1-nov quedó corregido a 280 → sin ganancia en 2 semanas |
+| Hunter | ternero | 101 kg CC 2,8 (14-nov) |
+| Normando 2 | ternero | 65 kg CC 3,5 (14-nov): 55 → 65 kg en 21 días ≈ 0,48 kg/día, mejorando |
 
 - **Taurus**: se queda solo para preñar a Manchas y ganar peso; después se vende. No califica como
-  reproductor (escrotal bajo el estándar y es hijo de Manchas). Protocolo de papilomatosis: D84
-  cumplido el 1-nov, **D96 pendiente el 13-nov** (última).
-- **Normando 2**: ternero de biberón con Sprayfo Azul. Plan de leche entregado en PDF
-  (`Plan_leche_Normando2.pdf`): 5 L hasta el 9-nov, pico de 6 L del 10 al 16, y bajada hasta el
-  destete a partir del 8-dic, que se decide por consumo de concentrado (1 kg/día por 3 días), no
-  por fecha. **Atención: 55 kg el 24-oct → 57 kg el 8-nov son 0,13 kg/día, muy por debajo de los
-  0,6-0,8 esperados.** Revisar tomas, temperatura, agua y concentrado.
-- **Lote 1** (Santo Domingo): según la hoja de compra, 10 toretes (el usuario confirmó que los 8
-  anotados como "toros" son toretes), 8.916 lb (891,6 lb prom.), $1,26/lb = $11.233 + flete $60 +
-  guías y marcada $30 = $11.323, comprados el 10-nov-2026. El usuario lo está editando en la app;
-  verificar que Finanzas quede con el monto real (tenía $10.000).
-- Boletines ASOGAN cargados hasta el **2-nov-2026**. Falta el del 26-oct. `db.preciosLocal` está
-  vacío todavía.
+  reproductor (escrotal bajo el estándar y es hijo de Manchas). Papilomatosis: D96 cumplido el
+  14-nov (protocolo terminado); queda una verruga pequeña y casi seca en el cuello.
+- **Normando 2**: biberón con Sprayfo Azul, taza al ras (~130-160 g) por litro, 5 L/día. Diarrea
+  desde que llegó; el 8-nov recibió 1,5 mL de Valbentad 25 (albendazol). La visita del 14-nov lo ve
+  "más alentado". Si la diarrea sigue: coprológico antes de comprar coccidicida (Baycox se descartó
+  por precio, $40).
+- **Respiratoria**: no se consiguió CRB viral; se aplica NEUMOBAC. Hunter recibió su 1ª dosis el
+  14-nov. Normando 2 tenía una 1ª dosis "CRB" el 25-oct y el 14-nov recibió NEUMOBAC registrado
+  como "refuerzo" (con `fechaCumplida` 18-nov, fecha futura: error de registro). Como la bacterina
+  necesita 2 dosis del mismo producto, Normando 2 necesita una 2ª dosis de NEUMOBAC ~5-dic.
+- **Lote toretes** (antes "Lote 1", Santo Domingo): 10 toretes, 891,6 lb prom., $11.233 + flete $60
+  + guías $30 (los paga LM) = $11.323, comprados el 10-nov-2026, venta estimada 7-may-2027.
+  Los $1.323 extra salen de la meta de Banco Guayaquil: retiro en la meta + egreso "Reinversión".
+- Boletines ASOGAN cargados hasta el **9-nov-2026** (ya con el Formulario). Falta el del 26-oct.
+  `db.preciosLocal` vacío. `config.rendRef` = 14 (lo puso el usuario).
 
 ## Pendiente
 
-1. **Hunter: 1ª dosis de vacuna respiratoria CRB, vencida desde el 24-oct.** Es lo más urgente.
-2. Registrar el peso real de Hunter (o el estimado, con nota de que fue a ojo): mientras no esté,
-   la app le calcula las dosis sobre los 33 kg del nacimiento.
-3. Taurus: D96 de Cuprho Plus el 13-nov + Optimizador Bio, y amarrar la verruga vieja del cuello.
-4. Normando 2: refuerzo CRB el 18-nov y refuerzo vitamínico el 23-nov.
-5. Castrar a Hunter (burdizzo). Con pastoreo libre es el único control de consanguinidad: es hijo
+1. Corregir en la app las fichas respiratorias: Normando 2 cumplida el 14-nov (no el 18), su 2ª
+   dosis de NEUMOBAC ~5-dic; refuerzo de Hunter el 5-dic (21 días), no el 8-dic.
+2. Confirmar si cada ternero recibió 5 mL de NEUMOBAC (el gasto dice "1 dosis entera para Hunter y
+   Normando"): si se repartieron 5 mL entre los dos, cada uno quedó con media dosis.
+3. Normando 2: refuerzo vitamínico el 23-nov; seguir la diarrea (coprológico si no cede).
+4. Castrar a Hunter (burdizzo). Con pastoreo libre es el único control de consanguinidad: es hijo
    de Manchas y entero la serviría desde los 8-9 meses.
-6. Registrar tipo, cantidad y **peso** real del Lote 1.
-7. Pesar a Manchas: su registro es de junio.
+5. Pesar a Manchas: su registro es de junio.
+6. Taurus: amarrar la verruga del cuello y vigilar el peso (280 kg sin cambio).
 
 ## Referencia completa
 
