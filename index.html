@@ -1079,7 +1079,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const APP_FECHA = '2026-11-15';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -1323,6 +1323,9 @@ function guardarLocal() { try { localStorage.setItem(SK, JSON.stringify(db)); } 
 const SK_BASE = SK + '_base';
 const SYNC_COLECCIONES = ['visitas', 'pesoCC', 'animales', 'lotes', 'vacunas', 'tratamientos', 'preciosLocal'];
 const _js = v => JSON.stringify(v === undefined ? null : v);
+// Para decidir si un registro cambió: ignora _senal, que es un cálculo que cada equipo rehace al
+// arrancar. Si contara, el recálculo hacía ganar el lote viejo completo sobre una edición real.
+const _jsReg = v => JSON.stringify(v === undefined ? null : v, (k, x) => (k === '_senal' ? undefined : x));
 function leerBase() { try { const s = localStorage.getItem(SK_BASE); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 function guardarBase(d) { try { localStorage.setItem(SK_BASE, JSON.stringify(d)); } catch (e) {} }
 // La marca de pendiente lleva un sello único: si se edita algo mientras una subida está en curso,
@@ -1336,13 +1339,13 @@ function marcarPendiente(si) { try { si ? localStorage.setItem(SK + '_pend', Dat
 function sincDecidir(l, b, r) {
   const hayL = l !== undefined, hayR = r !== undefined, hayB = b !== undefined;
   if (hayL && hayR) {
-    if (_js(l) === _js(r)) return { v: l };
+    if (_jsReg(l) === _jsReg(r)) return { v: l };
     if (!hayB) return { v: r };
-    if (_js(l) === _js(b)) return { v: r };
+    if (_jsReg(l) === _jsReg(b)) return { v: r };
     return { v: l };
   }
-  if (hayL) return (hayB && _js(l) === _js(b)) ? null : { v: l };   // borrado en Drive
-  if (hayR) return (hayB && _js(r) === _js(b)) ? null : { v: r };   // borrado aquí
+  if (hayL) return (hayB && _jsReg(l) === _jsReg(b)) ? null : { v: l };   // borrado en Drive
+  if (hayR) return (hayB && _jsReg(r) === _jsReg(b)) ? null : { v: r };   // borrado aquí
   return null;
 }
 function sincUnirLista(L, B, R, clave) {
@@ -1381,6 +1384,7 @@ function normalizarDb() {
   if (!db.tratamientos) db.tratamientos = [];
   if (!db.vacunas) db.vacunas = [];
   limpiarVacunasLegacy();
+  (db.lotes || []).forEach(l => { if (l && '_senal' in l) delete l._senal; });
   repararRespiratoriaNov2026();
   crbAgendarDosisAdicional(null);
   // Reparación: lotes activos cuya fecha de venta estimada se calculó con la regla vieja
@@ -1397,6 +1401,13 @@ async function leerDrive() {
   if (!r.ok) throw new Error('Drive respondió ' + r.status);
   const d = await r.json();
   if (!d || typeof d !== 'object' || Array.isArray(d)) throw new Error('respuesta inválida de Drive');
+  if (d.error || d.err || d.ok === false) throw new Error('Drive respondió un error: ' + String(d.error || d.err || 'ok:false').slice(0, 120));
+  if (!Array.isArray(d.animales) || !Array.isArray(d.visitas)) {
+    // Un {} solo es válido la primera vez (Drive recién creado y este equipo sin datos)
+    const base = leerBase();
+    const primeraVez = !Object.keys(d).length && !(base && (base.animales || []).length) && !(db.animales || []).length;
+    if (!primeraVez) throw new Error('Drive devolvió algo que no son los datos de la app; no se sincroniza');
+  }
   return d;
 }
 async function escribirDrive(datos) {
@@ -1415,11 +1426,15 @@ function sincronizarConDrive() {
     const sello = leerPendiente();
     const remoto = await leerDrive();
     const antes = _js(db);
-    db = sello ? sincUnirDatos(db, leerBase(), remoto) : JSON.parse(_js(remoto));   // copia: normalizarDb no debe tocar 'remoto'
+    const baseAntes = leerBase();
+    const habiaAnimales = ((baseAntes && baseAntes.animales) || []).length || (JSON.parse(antes).animales || []).length;
+    const unido = sello ? sincUnirDatos(db, baseAntes, remoto) : JSON.parse(_js(remoto));   // copia: normalizarDb no debe tocar 'remoto'
+    if (habiaAnimales && !(unido.animales || []).length) throw new Error('la sincronización dejaría la app sin animales; no se aplica. Revisa Drive');
+    db = unido;
     normalizarDb();
     const enviado = _js(db);   // la base es exactamente lo que quedó en Drive, no lo editado después
     if (enviado !== _js(remoto)) await escribirDrive(JSON.parse(enviado));
-    guardarBase(JSON.parse(enviado)); guardarLocal();
+    guardarBase(JSON.parse(enviado)); guardarLocal(); _ultimaSync = Date.now();
     if (sello && leerPendiente() === sello) marcarPendiente(false);
     return _js(db) !== antes;   // true si llegaron cambios de otro lado
   });
@@ -1453,6 +1468,26 @@ function saveDiferido(ms) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden' && _saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; save(); }
 });
+// Al volver la señal o al volver la app a primer plano: sube lo que quedó pendiente sin conexión y,
+// si pasó mucho rato desde la última sincronización, trae lo hecho en el otro equipo.
+var _ultimaSync = Date.now();
+const SYNC_REFRESCO_MIN = 10;
+async function sincronizarSiHaceFalta() {
+  if (!SCRIPT_URL) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (!hayPendientes() && Date.now() - _ultimaSync < SYNC_REFRESCO_MIN * 60000) return;
+  setSyncStatus('syncing', hayPendientes() ? 'Subiendo lo guardado sin conexión...' : 'Actualizando desde Drive...');
+  try {
+    const cambio = await sincronizarConDrive();
+    setSyncStatus('synced', '✓ Sincronizado · ' + _hora());
+    if (cambio) refrescarVistaActual();
+  } catch (e) {
+    const m = _motivoFallo(e);
+    setSyncStatus('offline', m ? '⚠️ Error con Drive — ' + m.slice(0, 70) : (hayPendientes() ? '📴 Sin conexión — tus cambios se suben al reconectar' : '📴 Sin conexión'));
+  }
+}
+window.addEventListener('online', () => { sincronizarSiHaceFalta(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') sincronizarSiHaceFalta(); });
 function limpiarVacunasLegacy() {
   // ── Fecha de corte: todo lo pendiente anterior a 01-jun-2026 es legacy ──
   const FECHA_CORTE = new Date('2026-06-01T00:00:00');
@@ -2358,8 +2393,7 @@ function getSanPendientes() {
   function registrar(item, a) {
     if (item.tipo === 'trat') {
       // Protocolo multi-paso (Neonatal, Pre-Parto, Pre-Servicio, Respiratoria, Papilomatosis) → vive en db.tratamientos con protocoloId
-      const yaAsignado = (db.tratamientos||[]).some(t => String(t.animalId) === String(a.id) && t.protocoloId === item.id);
-      if (yaAsignado) return;
+      if (protocoloEnCurso(a, item.id)) return;
     } else {
       // Vacuna/antiparasitario/vitamina de dosis única → vive en db.vacunas con protId
       const vacAnimal = (db.vacunas||[]).filter(v => String(v.animalId) === String(a.id) && v.protId === item.id);
@@ -2601,7 +2635,7 @@ function sanAbrirBrigada(protId) {
   ov.innerHTML = '<div class="modal"><div class="modal-handle"></div>'
     + '<div class="modal-title">📋 Brigada ' + SAN_EXTERNO_LABEL + ' · ' + item.nombre + '</div>'
     + '<label style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--tierra2);">Fecha de aplicación</label>'
-    + '<input id="san-brig-fecha" type="date" value="' + hoy() + '" style="width:100%;padding:8px;border:1.5px solid var(--crema3);border-radius:8px;font-size:13px;margin:4px 0 12px;">'
+    + '<input id="san-brig-fecha" type="date" value="' + hoy() + '" max="' + hoy() + '" style="width:100%;padding:8px;border:1.5px solid var(--crema3);border-radius:8px;font-size:13px;margin:4px 0 12px;">'
     + '<div style="font-size:10px;font-weight:800;text-transform:uppercase;color:var(--tierra2);margin-bottom:4px;">Animales vacunados</div>'
     + checks
     + '<button class="btn btn-verde" style="width:100%;margin-top:14px;" onclick="sanGuardarBrigada(\'' + protId + '\')">✅ Registrar como cumplida</button>'
@@ -2613,6 +2647,7 @@ async function sanGuardarBrigada(protId) {
   const item = PLANILLA_ANUAL.find(p => p.id === protId);
   const fecha = (document.getElementById('san-brig-fecha') || {}).value;
   if (!fecha) { showToast('⚠️ Ingresa la fecha'); return; }
+  if (fecha > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
   const ids = [...document.querySelectorAll('.san-brig-chk')].filter(c => c.checked).map(c => c.value);
   if (!ids.length) { showToast('⚠️ Marca al menos un animal'); return; }
   if (!db.vacunas) db.vacunas = [];
@@ -2707,7 +2742,7 @@ function renderAnimales() {
             const col=dp<0?'var(--rojo)':dp<=30?'var(--sol)':'var(--pasto)';
             html+=`<div style="font-size:10px;color:${col};">Parto: ${fd(a.fechaParto)} (${dp<0?'¡hace '+Math.abs(dp)+'d!':dp===0?'HOY':'en '+dp+'d'})</div>`;
             if(dp>=0&&dp<=45){
-              const yaAsignado=db.tratamientos&&db.tratamientos.some(t=>String(t.animalId)===String(a.id)&&t.protocoloId==='preparto');
+              const yaAsignado=protocoloEnCurso(a,'preparto');
               if(!yaAsignado){
                 html+=`<div style="margin-top:4px;padding:5px 7px;background:rgba(192,57,43,.10);border:1px solid rgba(192,57,43,.30);border-radius:7px;font-size:10px;color:var(--rojo);font-weight:700;">⚠️ Iniciar protocolo Pre-Parto · faltan ${dp}d</div>`;
               } else {
@@ -3118,9 +3153,7 @@ function renderReproPanel(animalId) {
     if (a.estadoRepro === 'prenada' && a.fechaParto && !a.fechaPartoReal) {
       const dp = Math.round((new Date(a.fechaParto+'T12:00:00') - new Date()) / 86400000);
       if (dp >= 0 && dp <= 45) {
-        const yaAsignado = db.tratamientos && db.tratamientos.some(t =>
-          String(t.animalId) === String(a.id) && t.protocoloId === 'preparto'
-        );
+        const yaAsignado = protocoloEnCurso(a, 'preparto');
         if (!yaAsignado) {
           sanHtml += `<div style="margin-top:8px;padding:8px 10px;background:rgba(192,57,43,.08);border:1.5px solid rgba(192,57,43,.3);border-radius:8px;">
             <div style="font-size:10px;font-weight:800;color:var(--rojo);">⚠️ Pre-Parto — faltan ${dp} días</div>
@@ -3320,6 +3353,16 @@ function ultimoPesoRegAnimal(animalId) {
     .sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));
   return regs.length ? { peso: Number(regs[0].peso), fecha: regs[0].fecha } : null;
 }
+// Aviso cuando la dosis sale de un peso viejo: 30 días en terneros (crecen rápido), 90 en adultos
+function avisoPesoViejo(animalId, reg) {
+  if (!reg || !reg.fecha) return '';
+  const a = (db.animales || []).find(x => String(x.id) === String(animalId));
+  const tipo = String((a && a.tipo) || '').toLowerCase();
+  const umbral = (tipo === 'ternero' || tipo === 'ternera') ? 30 : 90;
+  const dias = diasEntre(reg.fecha, hoy());
+  return dias > umbral ? ' · ⚠️ peso de hace ' + dias + ' días: pésalo antes de aplicar' : '';
+}
+const sinAvisoPeso = txt => String(txt || '').replace(/ · ⚠️ peso de hace \d+ días: pésalo antes de aplicar/g, '');
 // Calcula el volumen real cuando el texto de la dosis viene por peso ("1 ml/50 kg",
 // "6 ml por cada 50 kg"). Sirve para los pasos de protocolo, que no pasan por kgPorMl.
 function dosisConPeso(texto, animalId) {
@@ -3333,7 +3376,7 @@ function dosisConPeso(texto, animalId) {
   const calc = partes.filter(x => x[1] > 0)
     .map(x => (Math.max(0.5, Math.round(reg.peso * x[0] / x[1] * 10) / 10)) + ' ml').join(' + ');
   if (!calc) return t;
-  return t + ' → <strong>' + calc + '</strong> · peso ' + reg.peso + ' kg del ' + fd(reg.fecha);
+  return t + ' → <strong>' + calc + '</strong> · peso ' + reg.peso + ' kg del ' + fd(reg.fecha) + avisoPesoViejo(animalId, reg);
 }
 function ultimoPesoAnimal(animalId) {
   const regs = (db.pesoCC || [])
@@ -3519,6 +3562,7 @@ const COMPRA_LM_DESDE = '2026-10-20';
 function puedeSincronizarFinanzas() { return !!FINANZAS_URL && !!leerBase(); }
 async function syncEgresosAnimalesLM() {
   if (!puedeSincronizarFinanzas()) return;
+  if (!(db.animales || []).length) return;   // sin animales cargados no se envía nada: Finanzas borraría todo
   try {
     const egresos = [];
     (db.animales || []).forEach(a => {
@@ -3556,6 +3600,7 @@ async function syncEgresosAnimalesLM() {
 const VENTA_LM_DESDE = '2026-10-28';
 async function syncIngresosAnimalesLM() {
   if (!puedeSincronizarFinanzas()) return;
+  if (!(db.animales || []).length) return;
   try {
     const ingresos = (db.animales || [])
       .filter(a => !a.loteId && a.estado === 'vendido' && (parseFloat(a.valorVenta) || 0) > 0 && a.fventa && a.fventa >= VENTA_LM_DESDE)
@@ -4432,8 +4477,8 @@ function generarAnalisisLote(loteId) {
     + `<div style="font-size:10px;color:var(--tx3);font-style:italic;margin-top:6px;">💡 "Lo normal del mes" = tendencia de 12 meses × estacionalidad del mes cuando es confiable (✓). No es un precio garantizado.</div>`
     + (cambioP ? `<div style="font-size:10px;color:${cambioP.cambio?'var(--rojo)':'var(--tx3)'};font-style:italic;margin-top:4px;">${cambioP.cambio?'⚠️ El patrón estacional de los últimos 30 meses NO coincide con el histórico completo — confía más en el precio vs tendencia que en el calendario.':'📊 El patrón estacional reciente (30 meses) coincide con el histórico completo (correlación '+Math.round(cambioP.corr*100)+'%).'}</div>` : '');
 
-  // Cachear señal del ítem principal para sync Finanzas
-  lote._senal = resultados[0].senal;
+  // Señal del ítem principal para Finanzas: en memoria, nunca dentro del lote (ver _jsReg)
+  SENAL_LOTE.set(String(lote.id), resultados[0].senal);
 }
 
 
@@ -4706,7 +4751,8 @@ async function guardarLote() {
     liquidacion: existente?.liquidacion||null,
     finanzasVinculo: leerVinculoFinanzas(existente)
   };
-  if (editLoteId !== null) { const idx = db.lotes.findIndex(x=>x.id===editLoteId); if(idx>=0) db.lotes[idx]=lote; }
+  // Fusiona con el existente: conserva lo que el formulario no muestra (protocoloEntrada, pesoVentaLb…)
+  if (editLoteId !== null) { const idx = db.lotes.findIndex(x=>x.id===editLoteId); if(idx>=0) db.lotes[idx]={ ...db.lotes[idx], ...lote }; }
   else db.lotes.push(lote);
   cerrarModal('modal-lote'); renderLotes(); await save();
   showToast('✅ Lote guardado — sincronizando con Finanzas...');
@@ -6069,6 +6115,7 @@ async function marcarVacunaCumplida(vacId) {
   const inputFecha = document.getElementById('vac-fecha-' + vacId);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
   if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
+  vac.dosis = sinAvisoPeso(sanDosisVac(vac));   // congela los ml con el peso vigente al aplicarla (antes quedaban los del día de asignación)
   vac.fechaCumplida = fechaReal;
   // Siguiente dosis calculada desde la fecha real de aplicación
   if (vac.intervalo) {
@@ -6305,7 +6352,11 @@ function abrirEditarTratamiento(id) {
   document.getElementById('mt-trat-id').value = t.id;
   document.getElementById('mt-nombre').value = t.nombre || '';
   document.getElementById('mt-dosis').value = t.dosis || '';
-  document.getElementById('mt-via').value = t.via || 'SC — Subcutáneo';
+  const selVia = document.getElementById('mt-via'), viaT = t.via || 'SC — Subcutáneo';
+  if (selVia && selVia.options && ![...selVia.options].some(o => o.value === viaT)) {
+    const o = document.createElement('option'); o.value = viaT; o.textContent = viaT; selVia.appendChild(o);
+  }
+  selVia.value = viaT;
   document.getElementById('mt-modo').value = t.modo || '';
   document.getElementById('mt-intervalo').value = t.intervalo || '';
   document.getElementById('mt-fecha-aplicacion').value = t.fechaAplicacion || hoy();
@@ -6335,8 +6386,12 @@ async function guardarTratamiento() {
     // Busca por id Y animalId para evitar colisión si dos tratamientos tienen el mismo id legacy
     let idx = db.tratamientos.findIndex(x => x.id === editTratId && x.animalId === animalId);
     if (idx < 0) idx = db.tratamientos.findIndex(x => x.id === editTratId);
-    // Fusionar con la ficha existente: conserva protocoloId, dia, fechaCumplida y demás campos que el formulario no edita
-    if (idx >= 0) { db.tratamientos[idx] = Object.assign({}, db.tratamientos[idx], obj); } else { db.tratamientos.unshift(obj); }
+    // Fusionar con la ficha existente: conserva protocoloId, dia, fechaCumplida y demás campos que el formulario no edita.
+    // editadaManual: las reparaciones automáticas ya no le mueven la fecha ni le cambian el producto.
+    if (idx >= 0) {
+      if (!obj.via) obj.via = db.tratamientos[idx].via || '';
+      db.tratamientos[idx] = Object.assign({}, db.tratamientos[idx], obj, { editadaManual: true });
+    } else { db.tratamientos.unshift(obj); }
   } else {
     db.tratamientos.unshift(obj);
   }
@@ -6349,7 +6404,13 @@ async function guardarTratamiento() {
 async function borrarTratamiento(id) {
   if (!db.tratamientos) return;
   if (!confirm('¿Eliminar este tratamiento?')) return;
-  const animalId = db.tratamientos.find(t => t.id === id)?.animalId;
+  const borrada = db.tratamientos.find(t => t.id === id);
+  const animalId = borrada?.animalId;
+  if (borrada) {
+    db.config = db.config || {};
+    const k = String(borrada.animalId) + '|' + borrada.nombre;
+    db.config.sanDescartes = [...new Set([...(db.config.sanDescartes || []), k])];
+  }
   db.tratamientos = db.tratamientos.filter(t => t.id !== id);
   renderListaTratamientos(animalId);
   await save();
@@ -6357,6 +6418,25 @@ async function borrarTratamiento(id) {
 }
 // ── Auto-reparación: corrige fichas de protocolo con "dia" faltante o fechas fuera de secuencia ──
 // (arregla datos generados antes del fix de ordenamiento por dia en marcarTratamientoCumplido)
+// Cada asignación de un protocolo es un CICLO propio (t.ciclo). Las fichas viejas sin ciclo forman
+// un único ciclo 'legacy'. Duplicados y fechas en cascada se miran solo dentro del mismo ciclo, así
+// repetir un protocolo (Pre-Parto de otro parto, Papilomatosis otra vez) no borra ni mueve nada.
+const protCiclo = t => (t && t.ciclo) ? String(t.ciclo) : 'legacy';
+// ¿Tiene el animal este protocolo en curso? Sí si alguna ficha sigue pendiente. Pre-Parto además
+// cuenta si ya hay fichas para ESTE parto (desde 60 días antes del parto estimado). Otro protocolo
+// terminado hace menos de 300 días cuenta como vigente para no volver a pedirlo.
+function protocoloEnCurso(animal, protId) {
+  if (!animal) return false;
+  const fichas = (db.tratamientos || []).filter(t => String(t.animalId) === String(animal.id) && t.protocoloId === protId);
+  if (fichas.some(t => !t.fechaCumplida)) return true;
+  if (protId === 'preparto') {
+    if (!animal.fechaParto || animal.fechaPartoReal) return false;
+    const desde = addDias(animal.fechaParto, -60);
+    return fichas.some(t => (t.fechaAplicacion || '') >= desde || (t.fechaCumplida || '') >= desde);
+  }
+  const ult = fichas.map(t => t.fechaCumplida).filter(Boolean).sort().pop();
+  return !!ult && diasEntre(ult, hoy()) < 300;
+}
 function repararSecuenciaProtocolos(animalId) {
   if (!db.tratamientos) return false;
   let huboCambios = repararProductoRespiratoria();
@@ -6376,7 +6456,7 @@ function repararSecuenciaProtocolos(animalId) {
   //     si hay varias pendientes, conservar la original (id menor)
   const vistos = {};
   db.tratamientos.filter(t => String(t.animalId) === String(animalId) && t.protocoloId && t.dia != null)
-    .forEach(t => { const k = t.protocoloId + '|' + t.dia; (vistos[k] = vistos[k] || []).push(t); });
+    .forEach(t => { const k = t.protocoloId + '|' + protCiclo(t) + '|' + t.dia; (vistos[k] = vistos[k] || []).push(t); });
   const borrar = new Set();
   Object.values(vistos).forEach(grupo => {
     if (grupo.length < 2) return;
@@ -6399,10 +6479,12 @@ function repararSecuenciaProtocolos(animalId) {
         if (paso) { t.dia = paso.dia; huboCambios = true; }
       }
     });
-    // 2) Recalcular en cascada las fechas de los pasos PENDIENTES a partir del último paso CUMPLIDO,
-    //    usando el intervalo fijo del catálogo (nunca la fecha vieja, que puede estar corrompida)
-    const cumplidos = fichas.filter(t => t.fechaCumplida && t.dia != null).sort((a,b) => b.dia - a.dia);
-    const pendientes = fichas.filter(t => !t.fechaCumplida && t.dia != null).sort((a,b) => a.dia - b.dia);
+    // 2) Recalcular en cascada las fechas de los pasos PENDIENTES a partir del último paso CUMPLIDO
+    //    DEL MISMO CICLO, usando el intervalo fijo del catálogo (nunca la fecha vieja, que puede estar corrompida)
+    [...new Set(fichas.map(protCiclo))].forEach(ciclo => {
+    const delCiclo = fichas.filter(t => protCiclo(t) === ciclo);
+    const cumplidos = delCiclo.filter(t => t.fechaCumplida && t.dia != null).sort((a,b) => b.dia - a.dia);
+    const pendientes = delCiclo.filter(t => !t.fechaCumplida && t.dia != null && !t.editadaManual).sort((a,b) => a.dia - b.dia);
     if (cumplidos.length && pendientes.length) {
       let fechaBase = cumplidos[0].fechaCumplida;
       let diaBase = cumplidos[0].dia;
@@ -6415,6 +6497,7 @@ function repararSecuenciaProtocolos(animalId) {
         }
       });
     }
+    });
   });
   return huboCambios;
 }
@@ -6446,7 +6529,7 @@ function renderListaTratamientos(animalId) {
           <button onclick="borrarTratamiento(${t.id})" style="background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.2);color:var(--rojo);border-radius:7px;padding:4px 7px;cursor:pointer;font-size:11px;">🗑</button>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">💊 ${cumplido ? t.dosis : dosisConPeso(t.dosis, animalId)} · ${t.via}${(!esProtocolo && t.intervalo) ? ` · Cada ${t.intervalo} días` : ''}</div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:3px;">💊 ${cumplido ? (t.dosisAplicada || t.dosis) : dosisConPeso(t.dosis, animalId)} · ${t.via}${(!esProtocolo && t.intervalo) ? ` · Cada ${t.intervalo} días` : ''}</div>
       <div style="font-size:11px;color:var(--tx3);margin-bottom:3px;">📅 Fecha de aplicación: ${fd(t.fechaAplicacion)}</div>
       <div style="font-size:11px;color:${colorProx};margin-bottom:${t.modo?'6px':'0'};">${estadoProx}</div>
       ${t.modo ? `<details style="margin-top:6px;"><summary style="font-size:10px;color:var(--tierra);cursor:pointer;font-weight:600;">📋 Modo de aplicación</summary>
@@ -6471,7 +6554,7 @@ function renderListaTratamientos(animalId) {
 function repararProductoRespiratoria() {
   let cambios = false;
   (db.tratamientos || []).forEach(t => {
-    if (t.fechaCumplida) return;
+    if (t.fechaCumplida || t.editadaManual) return;
     const esResp = t.protocoloId === 'respiratoria' || /^Respiratoria ·/.test(t.nombre || '');
     if (!esResp) return;
     if (!/CRB|combinada/i.test(t.dosis || '')) return;
@@ -6490,7 +6573,7 @@ function repararRespiratoriaNov2026() {
   let cambios = false;
   const animales = new Set();
   db.tratamientos.forEach(t => {
-    if (t.protocoloId !== 'respiratoria') return;
+    if (t.protocoloId !== 'respiratoria' || t.editadaManual) return;
     const i = cat.pasos.findIndex(p => p.nombre === t.nombre);
     if (i < 0) return;
     const paso = cat.pasos[i], sig = cat.pasos[i + 1];
@@ -6500,7 +6583,7 @@ function repararRespiratoriaNov2026() {
   });
   // Revacunación anual generada antes con vía IM: la bacterina va subcutánea
   db.tratamientos.forEach(t => {
-    if (t.fechaCumplida || t.nombre !== 'Respiratoria · Revacunación Anual') return;
+    if (t.fechaCumplida || t.editadaManual || t.nombre !== 'Respiratoria · Revacunación Anual') return;
     if (t.via === RESP_VIA) return;
     t.dosis = RESP_PRODUCTO; t.via = RESP_VIA; t.modo = RESP_MODO;
     t.obs = 'Revacunación anual — generada automáticamente al completar la serie inicial';
@@ -6537,6 +6620,7 @@ function crbAgendarDosisAdicional(animalId) {
     if (edadDias >= SAN_RESPIRATORIA_DESDE_DIAS) return;
     const ya = db.tratamientos.some(x => String(x.animalId) === String(a.id) && x.nombre === 'Respiratoria · Dosis adicional');
     if (ya) return;
+    if (((db.config && db.config.sanDescartes) || []).includes(String(a.id) + '|Respiratoria · Dosis adicional')) return;
     db.tratamientos.unshift({
       id: Date.now() + Math.random(),
       animalId: a.id,
@@ -6565,12 +6649,13 @@ async function marcarTratamientoCumplido(id) {
   const inputFecha = document.getElementById('trat-fecha-' + id);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
   if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
+  t.dosisAplicada = sinAvisoPeso(dosisConPeso(t.dosis, t.animalId));   // ml calculados con el peso vigente al aplicarlo
   t.fechaCumplida = fechaReal;
   // Ya NO se sobrescribe t.fechaAplicacion — se conserva la fecha programada original
   if (t.protocoloId && t.intervalo) {
     // Buscar el siguiente paso del mismo protocolo aún pendiente y recorrer su fecha desde la fecha real aplicada
     const hermanos = db.tratamientos
-      .filter(x => String(x.animalId) === String(t.animalId) && x.protocoloId === t.protocoloId && !x.fechaCumplida && x.id !== id)
+      .filter(x => String(x.animalId) === String(t.animalId) && x.protocoloId === t.protocoloId && protCiclo(x) === protCiclo(t) && !x.fechaCumplida && x.id !== id)
       .sort((a,b) => (a.dia!=null && b.dia!=null) ? (a.dia-b.dia) : (parseFechaLocal(a.fechaAplicacion) - parseFechaLocal(b.fechaAplicacion)));
     if (hermanos.length) {
       hermanos[0].fechaAplicacion = addDias(fechaReal, t.intervalo);
@@ -6690,11 +6775,13 @@ function descargarJson(txt) {
 // ══════════════════════════════════════════════════════
 // FINANZAS_URL: se configura por dispositivo (ver «Conexión con Drive y con Finanzas»)
 
+const SENAL_LOTE = new Map();   // id de lote → señal calculada por generarAnalisisLote en esta sesión
 function calcSenalAsogan(lote) {
   // Un lote cerrado ya no tiene señal de venta
-  if (loteCerrado(lote)) { delete lote._senal; return null; }
-  // Usa el caché calculado por generarAnalisisLote (fuente única de verdad)
-  if (lote._senal) return lote._senal;
+  if (loteCerrado(lote)) { SENAL_LOTE.delete(String(lote.id)); return null; }
+  // Usa la señal calculada por generarAnalisisLote (fuente única de verdad)
+  const senalMem = SENAL_LOTE.get(String(lote.id));
+  if (senalMem) return senalMem;
   // Fallback: recalcula si el lote nunca fue analizado en esta sesión
   const tipoLote = (lote.items&&lote.items[0]) ? lote.items[0].tipo : 'vaca';
   const catIdx = getCatIndex(tipoLote);
@@ -6834,7 +6921,7 @@ let pccEditId = null;
 
 function abrirModalPesoCC(animalId) {
   pccEditId = null;
-  document.getElementById('pcc-fecha').value = hoy();
+  document.getElementById('pcc-fecha').value = hoy(); document.getElementById('pcc-fecha').max = hoy();
   document.getElementById('pcc-peso').value = '';
   document.getElementById('pcc-obs').value = '';
   const escr = document.getElementById('pcc-escrotal'); if(escr) escr.value='';
@@ -6866,7 +6953,7 @@ function editarPesoCC(id) {
   });
   sel.value = String(r.animalId);
   const tt = document.getElementById('pcc-modal-title'); if (tt) tt.textContent = '✏️ Editar Peso & CC';
-  document.getElementById('pcc-fecha').value = r.fecha;
+  document.getElementById('pcc-fecha').value = r.fecha; document.getElementById('pcc-fecha').max = hoy();
   document.getElementById('pcc-peso').value = r.peso != null ? r.peso : '';
   document.getElementById('pcc-obs').value = r.obs && r.obs !== 'Migrado de evaluación CC anterior' ? r.obs : '';
   pccOnAnimalChange();
@@ -6970,6 +7057,7 @@ async function guardarPesoCC() {
   const escrEl = document.getElementById('pcc-escrotal');
   const escrotal = (escrEl && escrEl.value) ? parseFloat(escrEl.value) : null;
   if (!fecha) { showToast('⚠️ Ingresa la fecha'); return; }
+  if (fecha > hoy()) { showToast('⚠️ La fecha del peso no puede ser futura'); return; }
   if (!animalId) { showToast('⚠️ Selecciona un animal'); return; }
   const a = (db.animales || []).find(x => String(x.id) === String(animalId));
   // Calcular CC desde sliders
@@ -7718,7 +7806,7 @@ function sanDosis(item, animal) {
   const reg = animal ? ultimoPesoRegAnimal(animal.id) : null;
   if (!reg) return item.dosis + ' — ⚠️ registra el peso para calcular';
   const ml = Math.max(0.5, Math.round(reg.peso / item.kgPorMl * 10) / 10);
-  return ml + ' ml · peso ' + reg.peso + ' kg del ' + fd(reg.fecha) + ' (' + item.dosis + ')';
+  return ml + ' ml · peso ' + reg.peso + ' kg del ' + fd(reg.fecha) + ' (' + item.dosis + ')' + avisoPesoViejo(animal.id, reg);
 }
 function sanDosisVac(v) {
   if (!v || v.fechaCumplida) return v ? v.dosis : '';
@@ -7941,12 +8029,15 @@ async function sanAsignarProtocolo(protocoloId, animalId, enLote) {
   if (!db.tratamientos) db.tratamientos = [];
   const fechaInicio = protFechaInicioValida(protocoloId, animal, hoy());
   if (!enLote && fechaInicio !== hoy()) showToast('📅 ' + animal.nombre + ' aún no tiene la edad mínima: Día 0 movido al ' + fd(fechaInicio));
+  const ciclo = String(Date.now()) + Math.random().toString(36).slice(2, 6);
   protocolo.pasos.forEach((paso, idx) => {
     const fechaPaso = addDias(fechaInicio, paso.dia);
     db.tratamientos.unshift({
       id: Date.now() + Math.random() + idx,
       animalId: animal.id,
       protocoloId,
+      ciclo,
+      dia: paso.dia,
       nombre: paso.nombre,
       dosis: paso.productos,
       via: 'Ver modo de aplicación',
