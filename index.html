@@ -1079,7 +1079,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v19';
 const APP_FECHA = '2026-11-15';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
@@ -6186,7 +6186,7 @@ const CATALOGO_PROTOCOLOS = [
     nota: '⚠️ Aplicar sin importar sexo. Base preventiva obligatoria antes de cualquier otro protocolo.',
     pasos: [
       { dia: 0,  nombre: 'Día 0 · Nacimiento',          productos: 'Calostro (primeras 6h) + Yodo en ombligo',                                modo: 'Calostro: asegurar toma dentro de las primeras 6 horas, mínimo 2 litros. Ombligo: desinfectar con yodo al 7-10%, repetir a las 12h.', intervalo: 1 },
-      { dia: 1,  nombre: 'Día 1 · Vitamina ADE',         productos: 'Fantel 4% ADE 1 ml/50kg IM (anca)',                                      modo: 'Músculo del anca, golpe seco 90°, aguja fina (20G x 1").', intervalo: 14 },
+      { dia: 1,  nombre: 'Día 1 · Vitamina ADE',         productos: 'Vigantol ADE Fuerte 2 ml IM profunda (anca)',                            modo: 'Intramuscular profunda en el anca, golpe seco 90°, aguja fina (20G x 1"). Dosis fija de ternero (2–3 ml), no por peso.', intervalo: 14 },
       { dia: 15, nombre: 'Día 15 · Desparasitación',     productos: 'Desparasitante pediátrico ORAL (fenbendazol o albendazol en suspensión) según peso', modo: 'Por boca, dosis según peso del ternero y prospecto. NO usar ivermectina inyectable antes de los 2 meses de edad.', intervalo: 15 },
       { dia: 30, nombre: 'Día 30 · Refuerzo vitamínico', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                    modo: 'Anca lado contrario al anterior. Fin del protocolo neonatal — continuar con Protocolo de Crecimiento.', intervalo: null },
     ]
@@ -6214,9 +6214,9 @@ const CATALOGO_PROTOCOLOS = [
     descripcion: 'Continúa la base inmunológica tras el neonatal. Vitaminas + desparasitación regular para crecimiento sano.',
     nota: '💡 Para machos con destino comercial, activar también el add-on "Engorde Rápido".',
     pasos: [
-      { dia: 0,  nombre: 'Crecimiento · Día 0',  productos: 'Optimizador Bio 1 ml/50kg IM (anca) + Fantel 4% ADE 1 ml/50kg IM (lado contrario)', modo: 'Optimizador: anca derecha. Fantel: anca izquierda.', intervalo: 30 },
+      { dia: 0,  nombre: 'Crecimiento · Día 0',  productos: 'Optimizador Bio 1 ml/50kg IM (anca) + Vigantol ADE Fuerte 2–3 ml IM profunda (lado contrario)', modo: 'Optimizador: anca derecha. Vigantol: anca izquierda, intramuscular profunda. Jeringas separadas.', intervalo: 30 },
       { dia: 30, nombre: 'Crecimiento · Día 30', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Alternar lado respecto a dosis anterior.', intervalo: 30 },
-      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Fantel 4% ADE 1 ml/50kg IM (anca)',                                                modo: 'Refuerzo ivermectina + vitaminas. Alternar lado.', intervalo: 30 },
+      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Ivermec-JB (ivermectina 1%) 1 ml/50kg SC (cuello) + Vigantol ADE Fuerte 2–3 ml IM profunda (anca)', modo: 'Dos productos, jeringas separadas: la ivermectina BAJO LA PIEL de la tabla del cuello; el Vigantol en el músculo del anca, lado alternado.', intervalo: 30 },
       { dia: 90, nombre: 'Crecimiento · Día 90', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Última dosis del ciclo. Evaluar continuar con protocolo adulto según sexo y edad.', intervalo: null },
     ]
   },
@@ -7737,8 +7737,8 @@ const PLANILLA_ANUAL = [
   // ANTIPARASITARIOS
   {id:'iverm',     nombre:'Ivermectina 1%',             tipo:'antipar', cat:'🐛 Antiparasitarios',
    meses:[2,8],   aplica:'todos', edadMinDias:60, kgPorMl:50, intervaloLabel:'Febrero y agosto — alternando con el fasciolicida',
-   desc:'Parásitos internos y externos. Va en FEBRERO y AGOSTO, intercalada con el fasciolicida de mayo y noviembre: entre los dos el animal queda desparasitado cuatro veces al año sin repetir principio activo. Antes estaba cada 90 días, que en adultos a pastoreo es más de lo necesario y acelera la resistencia, y encima el fasciolicida trae fenbendazol y cubre los mismos nematodos. No antes de los 2 meses de edad (antes: desparasitante oral pediátrico). RETIRO: 42 días antes de faena / 28 días antes de ordeño.',
-   dosis:'1 ml por cada 50 kg de peso', via:'SC — tabla del cuello', quien:'tú mismo'},
+   desc:'Parásitos internos y externos. Va en FEBRERO y AGOSTO, intercalada con el fasciolicida de mayo y noviembre: entre los dos el animal queda desparasitado cuatro veces al año sin repetir principio activo. Antes estaba cada 90 días, que en adultos a pastoreo es más de lo necesario y acelera la resistencia, y encima el fasciolicida trae fenbendazol y cubre los mismos nematodos. No antes de los 2 meses de edad (antes: desparasitante oral pediátrico). Producto en uso: Ivermec-JB (James Brown), ivermectina 1% sola, sin vitaminas. ⚠️ Su etiqueta dice: NO aplicar en vacas en lactancia ni 28 días antes del parto, ni en animales débiles o desnutridos. RETIRO de carne: 28 días.',
+   dosis:'1 ml por cada 50 kg de peso (Ivermec-JB)', via:'SC — tabla del cuello', quien:'tú mismo'},
   {id:'fasciol',   nombre:'Fasciolicida — Saguaymic Plus (triclabendazol 10% + fenbendazol 10%)', tipo:'antipar', cat:'🐛 Antiparasitarios',
    meses:[5,11],  aplica:'todos',   edadMinDias:90, kgPorMl:8.333, intervaloLabel:'Cada 6 meses — inicio y fin época lluviosa (desde los 3 meses)',
    desc:'Fasciola hepatica (distomatosis). Crítico en zonas húmedas: el caracol que la transmite se activa con la lluvia. El triclabendazol mata la fasciola en TODOS sus estadios, incluidas las formas jóvenes que migran por el hígado (el closantel, que se usaba antes, solo alcanza a las adultas); el fenbendazol cubre además los nematodos gastrointestinales. ES ORAL, no inyectable: jeringa sin aguja o pistola dosificadora, al fondo de la lengua. AGITAR BIEN el frasco antes de cada toma — es una suspensión y sin agitar las primeras dosis salen flojas. NUNCA subdosificar: es la forma más rápida de generar resistencia al triclabendazol. RETIRO: carne 28 días · leche 12 días.',
@@ -7746,9 +7746,9 @@ const PLANILLA_ANUAL = [
   // VITAMINAS
   {id:'ade',       nombre:'Vitamina ADE',               tipo:'vitamina', cat:'🌿 Vitaminas y Minerales',
    meses:[1,4,7,10], aplica:'todos', intervaloLabel:'Cada 90 días',
-   kgPorMl:50,
-   desc:'Vitaminas A, D y E. Inmunidad, huesos y reproducción. Mismo día que Complejo B. Dosis SIEMPRE por peso: A y D se acumulan — el exceso intoxica, sobre todo en terneros. Volumen por punto IM: máx. 5 ml en adultos y 2–3 ml en terneros (dividir en 2 sitios si hace falta).',
-   dosis:'1 ml por cada 50 kg de peso', via:'IM — músculo nalga o cuello', quien:'tú mismo'},
+   dosisCat:{ ternero:'2–3 ml', adulto:'5–7 ml' },
+   desc:'Vigantol ADE Fuerte (Elanco): cada ml trae vitamina A 500.000 UI, D3 75.000 UI y E 50 mg. Inmunidad, huesos y reproducción. Mismo día que Complejo B, con jeringa y sitio distintos. La etiqueta da dosis FIJA por animal, no por peso: terneros 2–3 ml, adultos 5–7 ml. A y D se acumulan: no repetir antes de los 90 días. Máx. 5 ml por punto de inyección (dividir en 2 sitios en adultos).',
+   dosis:'Terneros 2–3 ml · adultos 5–7 ml (dosis fija por animal)', via:'IM profunda — músculo nalga o cuello', quien:'tú mismo'},
   {id:'complb',    nombre:'Complejo B',                 tipo:'vitamina', cat:'🌿 Vitaminas y Minerales',
    meses:[1,4,7,10], aplica:'todos', intervaloLabel:'Cada 90 días',
    desc:'Sistema nervioso y apetito. Mismo día que ADE (jeringa y sitio distintos). Hidrosoluble: margen amplio, el exceso se elimina por orina.',
@@ -7802,6 +7802,11 @@ const SAN_RESPIRATORIA_HASTA_DIAS = 90; // hasta (después de esto ya se conside
 
 // Dosis real para el animal según su último peso registrado (ítems con kgPorMl). Sin peso: pide registrarlo.
 function sanDosis(item, animal) {
+  if (item && item.dosisCat) {
+    if (!animal) return item.dosis;
+    const esTern = sanEsTernero(animal);
+    return (esTern ? item.dosisCat.ternero : item.dosisCat.adulto) + ' · dosis fija de ' + (esTern ? 'ternero' : 'adulto') + ' (no va por peso)';
+  }
   if (!item || !item.kgPorMl) return item ? item.dosis : '';
   const reg = animal ? ultimoPesoRegAnimal(animal.id) : null;
   if (!reg) return item.dosis + ' — ⚠️ registra el peso para calcular';
@@ -7811,7 +7816,7 @@ function sanDosis(item, animal) {
 function sanDosisVac(v) {
   if (!v || v.fechaCumplida) return v ? v.dosis : '';
   const item = (typeof PLANILLA_ANUAL !== 'undefined') ? PLANILLA_ANUAL.find(p => p.id === v.protId) : null;
-  if (!item || !item.kgPorMl) return v.dosis;
+  if (!item || (!item.kgPorMl && !item.dosisCat)) return v.dosis;
   const a = (db.animales || []).find(x => String(x.id) === String(v.animalId));
   return sanDosis(item, a);
 }
