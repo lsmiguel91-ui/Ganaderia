@@ -124,10 +124,10 @@ Amarillo = rinde pero caro, o rinde menos que la referencia. **Rojo = solo si no
 
 ## Estado al 15 de noviembre de 2026
 
-Versión: **v16** (14-nov-2026; v14-v16 se hicieron desde claude.ai con la PC apagada). Historial reciente: v4 modal bajo el nav · v5 versión visible y
+Versión: **v17** (15-nov-2026, fechas respiratorias corregidas). v14-v16 se hicieron desde claude.ai con la PC apagada. Historial reciente: v4 modal bajo el nav · v5 versión visible y
 `preciosLocal` · v6 el simulador explica sus números · v7 % sobre el desembolso y referencia desde
 el historial · v8 diagnóstico al pegar JSON · v9 fasciolicida pasa a Saguaymic Plus · v10 dosis con
-fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes) · v13 guía desplegable de categorías por edad en Lotes, y el $/lb de compra (`compraLbItem`, `lbCompraLote`) en la tarjeta ASOGAN, el análisis, la venta (peso vendido opcional → `pesoVentaLb`) y la fila del lote. · v14 el protocolo respiratorio pasa a NEUMOBAC (bacterina, SC, 5 mL, refuerzo a 21 días; NO cubre IBR/DVB/PI3/BRSV) · v15 producto centralizado en `RESP_PRODUCTO`/`RESP_VIA`/`RESP_MODO` y `repararProductoRespiratoria()` · v16 auditoría de sanidad (brucelosis por edad incluyendo terneras, clostridial en serie de 2 dosis, ivermectina feb/ago intercalada con el fasciolicida may/nov).
+fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, sin importar/exportar · v12 el banner "Mercado ASOGAN — señal de hoy" sale de Visitas (queda solo en Lotes) · v13 guía desplegable de categorías por edad en Lotes, y el $/lb de compra (`compraLbItem`, `lbCompraLote`) en la tarjeta ASOGAN, el análisis, la venta (peso vendido opcional → `pesoVentaLb`) y la fila del lote. · v14 el protocolo respiratorio pasa a NEUMOBAC (bacterina, SC, 5 mL, refuerzo a 21 días; NO cubre IBR/DVB/PI3/BRSV) · v15 producto centralizado en `RESP_PRODUCTO`/`RESP_VIA`/`RESP_MODO` y `repararProductoRespiratoria()` · v16 auditoría de sanidad (brucelosis por edad incluyendo terneras, clostridial en serie de 2 dosis, ivermectina feb/ago intercalada con el fasciolicida may/nov) · v17 `repararRespiratoriaNov2026()` en `normalizarDb` alinea dia/intervalo de las fichas respiratorias con el catálogo (21 días), corrige la vía de la revacunación anual a SC y fija los datos de Normando 2; la fecha real de aplicación arranca en hoy y no acepta fechas futuras.
 
 **Hato El Quinche (4 animales):**
 
@@ -145,10 +145,9 @@ fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, 
   desde que llegó; el 8-nov recibió 1,5 mL de Valbentad 25 (albendazol). La visita del 14-nov lo ve
   "más alentado". Si la diarrea sigue: coprológico antes de comprar coccidicida (Baycox se descartó
   por precio, $40).
-- **Respiratoria**: no se consiguió CRB viral; se aplica NEUMOBAC. Hunter recibió su 1ª dosis el
-  14-nov. Normando 2 tenía una 1ª dosis "CRB" el 25-oct y el 14-nov recibió NEUMOBAC registrado
-  como "refuerzo" (con `fechaCumplida` 18-nov, fecha futura: error de registro). Como la bacterina
-  necesita 2 dosis del mismo producto, Normando 2 necesita una 2ª dosis de NEUMOBAC ~5-dic.
+- **Respiratoria**: no se consiguió CRB viral; se aplica NEUMOBAC, 5 mL SC a cada ternero.
+  Normando 2: serie completa (NEUMOBAC el 25-oct y el 14-nov; el usuario confirmó que la 1ª también
+  fue NEUMOBAC). Hunter: 1ª dosis el 14-nov, **refuerzo el 5-dic**. NEUMOBAC no cubre IBR/DVB/PI3/BRSV.
 - **Lote toretes** (antes "Lote 1", Santo Domingo): 10 toretes, 891,6 lb prom., $11.233 + flete $60
   + guías $30 (los paga LM) = $11.323, comprados el 10-nov-2026, venta estimada 7-may-2027.
   Los $1.323 extra salen de la meta de Banco Guayaquil: retiro en la meta + egreso "Reinversión".
@@ -157,15 +156,12 @@ fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, 
 
 ## Pendiente
 
-1. Corregir en la app las fichas respiratorias: Normando 2 cumplida el 14-nov (no el 18), su 2ª
-   dosis de NEUMOBAC ~5-dic; refuerzo de Hunter el 5-dic (21 días), no el 8-dic.
-2. Confirmar si cada ternero recibió 5 mL de NEUMOBAC (el gasto dice "1 dosis entera para Hunter y
-   Normando"): si se repartieron 5 mL entre los dos, cada uno quedó con media dosis.
-3. Normando 2: refuerzo vitamínico el 23-nov; seguir la diarrea (coprológico si no cede).
-4. Castrar a Hunter (burdizzo). Con pastoreo libre es el único control de consanguinidad: es hijo
+1. Hunter: refuerzo de NEUMOBAC el 5-dic.
+2. Normando 2: refuerzo vitamínico el 23-nov; seguir la diarrea (coprológico si no cede).
+3. Castrar a Hunter (burdizzo). Con pastoreo libre es el único control de consanguinidad: es hijo
    de Manchas y entero la serviría desde los 8-9 meses.
-5. Pesar a Manchas: su registro es de junio.
-6. Taurus: amarrar la verruga del cuello y vigilar el peso (280 kg sin cambio).
+4. Pesar a Manchas: su registro es de junio.
+5. Taurus: amarrar la verruga del cuello y vigilar el peso (280 kg sin cambio).
 
 ## Referencia completa
 

@@ -1079,8 +1079,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v16';
-const APP_FECHA = '2026-11-14';
+const APP_VERSION = 'v17';
+const APP_FECHA = '2026-11-15';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -1381,6 +1381,7 @@ function normalizarDb() {
   if (!db.tratamientos) db.tratamientos = [];
   if (!db.vacunas) db.vacunas = [];
   limpiarVacunasLegacy();
+  repararRespiratoriaNov2026();
   crbAgendarDosisAdicional(null);
   // Reparación: lotes activos cuya fecha de venta estimada se calculó con la regla vieja
   // (compra + plazo × 30.44 días) pasan a la regla común con Finanzas (meses de calendario).
@@ -6051,7 +6052,7 @@ function renderListaVacunas(animalId) {
         <div id="vac-fecha-wrap-${v.id}" style="flex:1;">
           <label style="font-size:9px;color:var(--tx3);">Fecha real de aplicación</label>
           <div style="display:flex;gap:6px;align-items:center;margin-top:3px;">
-            <input type="date" id="vac-fecha-${v.id}" value="${(v.fechaProgram && v.fechaProgram > hoy()) ? v.fechaProgram : hoy()}" style="flex:1;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--crema3);background:var(--crema);color:var(--tx);">
+            <input type="date" id="vac-fecha-${v.id}" value="${hoy()}" max="${hoy()}" style="flex:1;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--crema3);background:var(--crema);color:var(--tx);">
             <button class="btn btn-verde btn-sm" style="white-space:nowrap;" onclick="marcarVacunaCumplida(${v.id})">✅ Cumplida</button>
           </div>
         </div>` : '<div style="flex:1;"></div>'}
@@ -6067,6 +6068,7 @@ async function marcarVacunaCumplida(vacId) {
   // Leer fecha real del input
   const inputFecha = document.getElementById('vac-fecha-' + vacId);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
+  if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
   vac.fechaCumplida = fechaReal;
   // Siguiente dosis calculada desde la fecha real de aplicación
   if (vac.intervalo) {
@@ -6454,7 +6456,7 @@ function renderListaTratamientos(animalId) {
       ${!cumplido ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:flex-end;">
         <div style="flex:1;">
           <label style="font-size:9px;color:var(--tx3);">Fecha real de aplicación</label>
-          <input type="date" id="trat-fecha-${t.id}" value="${(t.fechaAplicacion && t.fechaAplicacion > hoy()) ? t.fechaAplicacion : hoy()}" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--crema3);background:var(--crema);color:var(--tx);">
+          <input type="date" id="trat-fecha-${t.id}" value="${hoy()}" max="${hoy()}" style="width:100%;font-size:12px;padding:6px 8px;border-radius:8px;border:1px solid var(--crema3);background:var(--crema);color:var(--tx);">
         </div>
         <button class="btn btn-verde btn-sm" style="white-space:nowrap;" onclick="marcarTratamientoCumplido(${t.id})">✅ Cumplido</button>
       </div>` : ''}
@@ -6476,6 +6478,47 @@ function repararProductoRespiratoria() {
     t.dosis = RESP_PRODUCTO; t.via = RESP_VIA; t.modo = RESP_MODO;
     cambios = true;
   });
+  return cambios;
+}
+// Alinea las fichas respiratorias con el catálogo vigente. Las fichas creadas con el protocolo viejo
+// guardaron dia 24 / intervalo 24: así el refuerzo quedaba a 24 días y no a 21. Además corrige datos
+// puntuales que el usuario confirmó el 15-nov-2026 (solo si siguen con el valor erróneo exacto).
+function repararRespiratoriaNov2026() {
+  if (!db.tratamientos || !db.tratamientos.length) return false;
+  const cat = CATALOGO_PROTOCOLOS.find(p => p.id === 'respiratoria');
+  if (!cat) return false;
+  let cambios = false;
+  const animales = new Set();
+  db.tratamientos.forEach(t => {
+    if (t.protocoloId !== 'respiratoria') return;
+    const i = cat.pasos.findIndex(p => p.nombre === t.nombre);
+    if (i < 0) return;
+    const paso = cat.pasos[i], sig = cat.pasos[i + 1];
+    if (t.dia !== paso.dia) { t.dia = paso.dia; cambios = true; animales.add(String(t.animalId)); }
+    const intervalo = sig ? sig.dia - paso.dia : null;
+    if (sig && t.intervalo !== intervalo) { t.intervalo = intervalo; cambios = true; animales.add(String(t.animalId)); }
+  });
+  // Revacunación anual generada antes con vía IM: la bacterina va subcutánea
+  db.tratamientos.forEach(t => {
+    if (t.fechaCumplida || t.nombre !== 'Respiratoria · Revacunación Anual') return;
+    if (t.via === RESP_VIA) return;
+    t.dosis = RESP_PRODUCTO; t.via = RESP_VIA; t.modo = RESP_MODO;
+    t.obs = 'Revacunación anual — generada automáticamente al completar la serie inicial';
+    cambios = true;
+  });
+  // Correcciones puntuales (Normando 2): el refuerzo se aplicó el 14-nov, no el 18; la 1ª dosis del
+  // 25-oct también fue NEUMOBAC, así que su serie quedó completa.
+  const fijar = (id, campo, viejo, nuevo) => {
+    const t = db.tratamientos.find(x => String(x.id) === id);
+    if (t && t[campo] === viejo) { t[campo] = nuevo; cambios = true; }
+  };
+  fijar('1792883417517.6226', 'fechaCumplida', '2026-11-18', '2026-11-14');
+  fijar('1794684028352.8018', 'fechaAplicacion', '2027-11-18', '2027-11-14');
+  const primeraN2 = db.tratamientos.find(x => String(x.id) === '1792883417516.1123');
+  if (primeraN2 && /CRB|combinada/i.test(primeraN2.dosis || '')) {
+    primeraN2.dosis = RESP_PRODUCTO; primeraN2.via = RESP_VIA; cambios = true;
+  }
+  animales.forEach(id => { if (repararSecuenciaProtocolos(id)) cambios = true; });
   return cambios;
 }
 // CRB: si la 1ª dosis se aplicó antes de los 55 días de vida (interferencia de anticuerpos maternos),
@@ -6521,6 +6564,7 @@ async function marcarTratamientoCumplido(id) {
   if (!t) return;
   const inputFecha = document.getElementById('trat-fecha-' + id);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
+  if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
   t.fechaCumplida = fechaReal;
   // Ya NO se sobrescribe t.fechaAplicacion — se conserva la fecha programada original
   if (t.protocoloId && t.intervalo) {
@@ -6545,14 +6589,14 @@ async function marcarTratamientoCumplido(id) {
         protocoloId: null,
         nombre: 'Respiratoria · Revacunación Anual',
         dosis: RESP_PRODUCTO,
-        via: 'IM — músculo del anca',
-        modo: 'Confirmar producto con el veterinario. Anca, aguja 18-20G x 1", aspirar antes. Alternar lado respecto al año anterior.',
+        via: RESP_VIA,
+        modo: RESP_MODO,
         intervalo: 365,
         fechaAplicacion: addDias(fechaReal, 365),
         fechaProxima: null,
-        obs: 'Revacunación anual CRB — generada automáticamente al completar la serie inicial',
+        obs: 'Revacunación anual — generada automáticamente al completar la serie inicial',
       });
-      showToast('📅 Revacunación anual CRB programada para ' + fd(addDias(fechaReal, 365)));
+      showToast('📅 Revacunación anual programada para ' + fd(addDias(fechaReal, 365)));
     }
   } else if (!t.protocoloId && t.intervalo) {
     // Tratamiento recurrente SIN protocolo: generar la ficha del siguiente ciclo
