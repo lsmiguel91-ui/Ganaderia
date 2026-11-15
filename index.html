@@ -1385,6 +1385,10 @@ function normalizarDb() {
   if (!db.vacunas) db.vacunas = [];
   limpiarVacunasLegacy();
   (db.lotes || []).forEach(l => { if (l && '_senal' in l) delete l._senal; });
+  // El ADE que se usa es Vigantol ADE Fuerte, no Fantel (confirmado por el usuario el 15-nov-2026)
+  (db.tratamientos || []).forEach(t => {
+    if (/Fantel 4% ADE 1 ml\/50kg IM/.test(t.dosis || '')) t.dosis = t.dosis.replace(/Fantel 4% ADE 1 ml\/50kg IM/g, 'Vigantol ADE Fuerte 2 ml IM profunda');
+  });
   repararRespiratoriaNov2026();
   crbAgendarDosisAdicional(null);
   // Reparación: lotes activos cuya fecha de venta estimada se calculó con la regla vieja
@@ -3362,7 +3366,7 @@ function avisoPesoViejo(animalId, reg) {
   const dias = diasEntre(reg.fecha, hoy());
   return dias > umbral ? ' · ⚠️ peso de hace ' + dias + ' días: pésalo antes de aplicar' : '';
 }
-const sinAvisoPeso = txt => String(txt || '').replace(/ · ⚠️ peso de hace \d+ días: pésalo antes de aplicar/g, '');
+const sinAvisoPeso = txt => String(txt || '').replace(/ · ⚠️ peso de hace \d+ días: pésalo antes de aplicar/g, '').replace(/ · (<span[^>]*>)?⛔ NO RECOMENDABLE[\s\S]*$/, '');
 // Calcula el volumen real cuando el texto de la dosis viene por peso ("1 ml/50 kg",
 // "6 ml por cada 50 kg"). Sirve para los pasos de protocolo, que no pasan por kgPorMl.
 function dosisConPeso(texto, animalId) {
@@ -7800,8 +7804,24 @@ const SAN_NEONATAL_VENTANA_DIAS = 40; // ventana de alerta proactiva del Protoco
 const SAN_RESPIRATORIA_DESDE_DIAS = 55; // ventana de alerta proactiva de Vacuna Respiratoria (CRB): desde
 const SAN_RESPIRATORIA_HASTA_DIAS = 90; // hasta (después de esto ya se considera atrasada por la vía normal, si se asignó)
 
+// Ivermec-JB: su etiqueta prohíbe aplicarla en vacas en lactancia y 28 días antes del parto. Para una
+// hembra preñada, servida o lactando devuelve el aviso (vacío si no aplica).
+function sanIvermRiesgo(a) {
+  if (!a || !sanEsHembra(a)) return '';
+  const lactando = a.estadoRepro === 'lactando' || (a.estadoRepro === 'prenada' && a.fechaPartoReal);
+  const puedePrenada = a.estadoRepro === 'prenada' || (!!a.fechaInicioServicio && a.estadoRepro !== 'vacia');
+  if (!lactando && !puedePrenada) return '';
+  return '⛔ NO RECOMENDABLE aplicarla a ' + a.nombre + (puedePrenada ? ': puede estar preñada' : ': está lactando')
+    + '. La etiqueta de Ivermec-JB prohíbe usarla en vacas en lactancia y 28 días antes del parto. '
+    + 'Las dosis anteriores no fueron un problema porque su leche solo la toma el ternero, no la consumen personas; '
+    + 'pero mientras pueda estar preñada, no la apliques sin consultar al veterinario.';
+}
 // Dosis real para el animal según su último peso registrado (ítems con kgPorMl). Sin peso: pide registrarlo.
 function sanDosis(item, animal) {
+  if (item && item.id === 'iverm' && sanIvermRiesgo(animal)) return sanDosisBase(item, animal) + ' · <span style="display:block;margin-top:4px;padding:6px 8px;border-radius:7px;background:rgba(192,57,43,.10);border:1.5px solid var(--rojo);color:var(--rojo);font-weight:700;">' + sanIvermRiesgo(animal) + '</span>';
+  return sanDosisBase(item, animal);
+}
+function sanDosisBase(item, animal) {
   if (item && item.dosisCat) {
     if (!animal) return item.dosis;
     const esTern = sanEsTernero(animal);
@@ -8001,6 +8021,7 @@ async function sanAsignarVacuna(protId, animalId, enLote) {
   const item = PLANILLA_ANUAL.find(p=>p.id===protId);
   const a = (db.animales||[]).find(x=>String(x.id)===String(animalId));
   if(!item||!a) return false;
+  if(item.id==='iverm' && sanIvermRiesgo(a) && !confirm(sanIvermRiesgo(a)+'\n\n¿Asignarla de todas formas?')) return false;
   if(!db.vacunas) db.vacunas=[];
   // Buscar si ya tiene pendiente
   const yaTiene = db.vacunas.some(v=>String(v.animalId)===String(a.id)&&v.protId===protId&&!v.fechaCumplida);
@@ -8195,7 +8216,7 @@ async function sanLoteDosis(loteId,dosisId){
     <div class="modal-title" id="mv-titulo">💉 Vacunas & Tratamientos</div>
     <input type="hidden" id="mv-animal-id">
     <div id="mv-prenez-alert" style="display:none;background:rgba(192,57,43,.08);border:1px solid rgba(192,57,43,.25);border-radius:8px;padding:10px;margin-bottom:8px;font-size:11px;color:var(--rojo);">
-      🤰 <strong>Animal preñada:</strong> Todas las vacunas del protocolo son seguras en preñez. La Brucelosis está bloqueada automáticamente — nunca aplicar en gestación.
+      🤰 <strong>Animal preñada:</strong> Las vacunas del protocolo son seguras en preñez. La Brucelosis está bloqueada automáticamente — nunca aplicar en gestación. <strong>⛔ Ivermectina (Ivermec-JB): NO recomendable</strong> — su etiqueta prohíbe aplicarla 28 días antes del parto y en lactancia.
     </div>
 
     <!-- TABS VACUNAS / TRATAMIENTOS -->
