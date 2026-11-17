@@ -1079,8 +1079,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v19';
-const APP_FECHA = '2026-11-15';
+const APP_VERSION = 'v20';
+const APP_FECHA = '2026-11-17';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -3366,7 +3366,7 @@ function avisoPesoViejo(animalId, reg) {
   const dias = diasEntre(reg.fecha, hoy());
   return dias > umbral ? ' · ⚠️ peso de hace ' + dias + ' días: pésalo antes de aplicar' : '';
 }
-const sinAvisoPeso = txt => String(txt || '').replace(/ · ⚠️ peso de hace \d+ días: pésalo antes de aplicar/g, '').replace(/ · (<span[^>]*>)?⛔ NO RECOMENDABLE[\s\S]*$/, '');
+const sinAvisoPeso = txt => String(txt || '').replace(/ · ⚠️ peso de hace \d+ días: pésalo antes de aplicar/g, '').replace(/ · (<span[^>]*>)?⛔ NO RECOMENDABLE[\s\S]*$/, '').replace(/ · (<span[^>]*>)?⚠️ [^<]*? recibió vitamina ADE el [\s\S]*$/, '');
 // Calcula el volumen real cuando el texto de la dosis viene por peso ("1 ml/50 kg",
 // "6 ml por cada 50 kg"). Sirve para los pasos de protocolo, que no pasan por kgPorMl.
 function dosisConPeso(texto, animalId) {
@@ -6119,6 +6119,10 @@ async function marcarVacunaCumplida(vacId) {
   const inputFecha = document.getElementById('vac-fecha-' + vacId);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
   if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
+  if (vac.protId === 'ade') {
+    const avisoAde = sanAdeRiesgo((db.animales || []).find(x => String(x.id) === String(vac.animalId)), fechaReal, vac.id);
+    if (avisoAde && !confirm(avisoAde + '\n\n¿Registrarla como aplicada de todas formas?')) return;
+  }
   vac.dosis = sinAvisoPeso(sanDosisVac(vac));   // congela los ml con el peso vigente al aplicarla (antes quedaban los del día de asignación)
   vac.fechaCumplida = fechaReal;
   // Siguiente dosis calculada desde la fecha real de aplicación
@@ -6192,7 +6196,7 @@ const CATALOGO_PROTOCOLOS = [
       { dia: 0,  nombre: 'Día 0 · Nacimiento',          productos: 'Calostro (primeras 6h) + Yodo en ombligo',                                modo: 'Calostro: asegurar toma dentro de las primeras 6 horas, mínimo 2 litros. Ombligo: desinfectar con yodo al 7-10%, repetir a las 12h.', intervalo: 1 },
       { dia: 1,  nombre: 'Día 1 · Vitamina ADE',         productos: 'Vigantol ADE Fuerte 2 ml IM profunda (anca)',                            modo: 'Intramuscular profunda en el anca, golpe seco 90°, aguja fina (20G x 1"). Dosis fija de ternero (2–3 ml), no por peso.', intervalo: 14 },
       { dia: 15, nombre: 'Día 15 · Desparasitación',     productos: 'Desparasitante pediátrico ORAL (fenbendazol o albendazol en suspensión) según peso', modo: 'Por boca, dosis según peso del ternero y prospecto. NO usar ivermectina inyectable antes de los 2 meses de edad.', intervalo: 15 },
-      { dia: 30, nombre: 'Día 30 · Refuerzo vitamínico', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                    modo: 'Anca lado contrario al anterior. Fin del protocolo neonatal — continuar con Protocolo de Crecimiento.', intervalo: null },
+      { dia: 30, nombre: 'Día 30 · Refuerzo vitamínico', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                    modo: 'Anca lado contrario al anterior. Es un refuerzo de MINERALES (selenio, cobre, cobalto, hierro, zinc, yodo) + vitamina B12; su etiqueta permite repetirlo a los 15–45 días. Aquí NO va Vigantol: el ADE del Día 1 no se repite antes de 90 días porque A y D se acumulan. Fin del protocolo neonatal — continuar con Protocolo de Crecimiento.', intervalo: null },
     ]
   },
   {
@@ -6215,12 +6219,12 @@ const CATALOGO_PROTOCOLOS = [
     emoji: '🌱',
     categoria: 'Crianza',
     aplica: ['ternero','ternera','macho joven'],
-    descripcion: 'Continúa la base inmunológica tras el neonatal. Vitaminas + desparasitación regular para crecimiento sano.',
+    descripcion: 'Continúa tras el neonatal: control de peso, refuerzo mineral (Optimizador Bio) y desparasitación. El ADE (Vigantol) NO va en este protocolo: lo pone la planilla anual cada 90 días, para no duplicar dosis que se acumulan.',
     nota: '💡 Para machos con destino comercial, activar también el add-on "Engorde Rápido".',
     pasos: [
-      { dia: 0,  nombre: 'Crecimiento · Día 0',  productos: 'Optimizador Bio 1 ml/50kg IM (anca) + Vigantol ADE Fuerte 2–3 ml IM profunda (lado contrario)', modo: 'Optimizador: anca derecha. Vigantol: anca izquierda, intramuscular profunda. Jeringas separadas.', intervalo: 30 },
-      { dia: 30, nombre: 'Crecimiento · Día 30', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Alternar lado respecto a dosis anterior.', intervalo: 30 },
-      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Ivermec-JB (ivermectina 1%) 1 ml/50kg SC (cuello) + Vigantol ADE Fuerte 2–3 ml IM profunda (anca)', modo: 'Dos productos, jeringas separadas: la ivermectina BAJO LA PIEL de la tabla del cuello; el Vigantol en el músculo del anca, lado alternado.', intervalo: 30 },
+      { dia: 0,  nombre: 'Crecimiento · Día 0',  productos: 'Pesar y registrar condición corporal (sin inyección)', modo: 'El refuerzo mineral del Día 30 neonatal se acaba de aplicar: no repetirlo. Este peso sirve para dosificar el Optimizador Bio del Día 30 y la ivermectina del Día 60.', intervalo: 30 },
+      { dia: 30, nombre: 'Crecimiento · Día 30', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Refuerzo mineral + B12, 30 días después del anterior (la etiqueta permite 15–45 días). Alternar lado respecto a la dosis anterior.', intervalo: 30 },
+      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Ivermec-JB (ivermectina 1%) 1 ml/50kg SC (cuello)', modo: 'BAJO LA PIEL de la tabla del cuello. El Vigantol ya no va en este paso: lo pone la planilla anual cada 90 días (A y D se acumulan).', intervalo: 30 },
       { dia: 90, nombre: 'Crecimiento · Día 90', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Última dosis del ciclo. Evaluar continuar con protocolo adulto según sexo y edad.', intervalo: null },
     ]
   },
@@ -6653,6 +6657,10 @@ async function marcarTratamientoCumplido(id) {
   const inputFecha = document.getElementById('trat-fecha-' + id);
   const fechaReal = (inputFecha && inputFecha.value) ? inputFecha.value : hoy();
   if (fechaReal > hoy()) { showToast('⚠️ La fecha de aplicación no puede ser futura: pon el día en que se aplicó'); return; }
+  if (SAN_ADE_RE.test(t.dosis || '')) {
+    const avisoAde = sanAdeRiesgo((db.animales || []).find(x => String(x.id) === String(t.animalId)), fechaReal, t.id);
+    if (avisoAde && !confirm(avisoAde + '\n\n¿Registrarlo como aplicado de todas formas?')) return;
+  }
   t.dosisAplicada = sinAvisoPeso(dosisConPeso(t.dosis, t.animalId));   // ml calculados con el peso vigente al aplicarlo
   t.fechaCumplida = fechaReal;
   // Ya NO se sobrescribe t.fechaAplicacion — se conserva la fecha programada original
@@ -7816,8 +7824,36 @@ function sanIvermRiesgo(a) {
     + 'Las dosis anteriores no fueron un problema porque su leche solo la toma el ternero, no la consumen personas; '
     + 'pero mientras pueda estar preñada, no la apliques sin consultar al veterinario.';
 }
+// Vitamina ADE (Vigantol ADE Fuerte, Engordan Plus ADE): A y D se acumulan, no se repite antes de 90 días.
+// Última aplicación cumplida de ADE del animal hasta 'fecha' (planilla o protocolo), sin contar el registro 'excluirId'.
+const SAN_ADE_MIN_DIAS = 90;
+const SAN_ADE_RE = /vigantol|\bADE\b/i;
+function sanAdeUltima(animalId, fecha, excluirId) {
+  let ult = '';
+  (db.vacunas || []).forEach(v => {
+    if (String(v.animalId) !== String(animalId) || v.protId !== 'ade' || !v.fechaCumplida || v.id === excluirId) return;
+    if (v.fechaCumplida <= fecha && v.fechaCumplida > ult) ult = v.fechaCumplida;
+  });
+  (db.tratamientos || []).forEach(t => {
+    if (String(t.animalId) !== String(animalId) || !t.fechaCumplida || t.id === excluirId || !SAN_ADE_RE.test(t.dosis || '')) return;
+    if (t.fechaCumplida <= fecha && t.fechaCumplida > ult) ult = t.fechaCumplida;
+  });
+  return ult;
+}
+// Aviso si el animal recibió ADE hace menos de 90 días respecto de 'fecha' (vacío si no aplica).
+function sanAdeRiesgo(a, fecha, excluirId) {
+  if (!a) return '';
+  const f = fecha || hoy();
+  const ult = sanAdeUltima(a.id, f, excluirId);
+  if (!ult) return '';
+  const dias = diasEntre(ult, f);
+  if (dias >= SAN_ADE_MIN_DIAS) return '';
+  return '⚠️ ' + a.nombre + ' recibió vitamina ADE el ' + fd(ult) + ' (hace ' + dias + ' días). Las vitaminas A y D se acumulan: '
+    + 'no repetir antes de ' + SAN_ADE_MIN_DIAS + ' días, o sea desde el ' + fd(addDias(ult, SAN_ADE_MIN_DIAS)) + '.';
+}
 // Dosis real para el animal según su último peso registrado (ítems con kgPorMl). Sin peso: pide registrarlo.
 function sanDosis(item, animal) {
+  if (item && item.id === 'ade' && sanAdeRiesgo(animal)) return sanDosisBase(item, animal) + ' · <span style="display:block;margin-top:4px;padding:6px 8px;border-radius:7px;background:rgba(192,57,43,.10);border:1.5px solid var(--rojo);color:var(--rojo);font-weight:700;">' + sanAdeRiesgo(animal) + '</span>';
   if (item && item.id === 'iverm' && sanIvermRiesgo(animal)) return sanDosisBase(item, animal) + ' · <span style="display:block;margin-top:4px;padding:6px 8px;border-radius:7px;background:rgba(192,57,43,.10);border:1.5px solid var(--rojo);color:var(--rojo);font-weight:700;">' + sanIvermRiesgo(animal) + '</span>';
   return sanDosisBase(item, animal);
 }
@@ -8022,6 +8058,7 @@ async function sanAsignarVacuna(protId, animalId, enLote) {
   const a = (db.animales||[]).find(x=>String(x.id)===String(animalId));
   if(!item||!a) return false;
   if(item.id==='iverm' && sanIvermRiesgo(a) && !confirm(sanIvermRiesgo(a)+'\n\n¿Asignarla de todas formas?')) return false;
+  if(item.id==='ade' && sanAdeRiesgo(a) && !confirm(sanAdeRiesgo(a)+'\n\n¿Asignarla de todas formas?')) return false;
   if(!db.vacunas) db.vacunas=[];
   // Buscar si ya tiene pendiente
   const yaTiene = db.vacunas.some(v=>String(v.animalId)===String(a.id)&&v.protId===protId&&!v.fechaCumplida);
@@ -8034,7 +8071,7 @@ async function sanAsignarVacuna(protId, animalId, enLote) {
     id:Date.now()+Math.random(),
     animalId:a.id, protId:item.id,
     nombre:item.nombre + (esPrimeraVez ? ' · 1ª dosis' : ''),
-    dosis:sanDosis(item, a), via:item.via,
+    dosis:sinAvisoPeso(sanDosis(item, a)), via:item.via,   // el aviso (peso viejo, ivermectina, ADE) se recalcula al mostrarla
     quien:item.quien, intervalo: esPrimeraVez ? item.refuerzoInicialDias : null,
     esRefuerzoInicial: esPrimeraVez,
     fechaProgram:hoy(), fechaCumplida:null,
