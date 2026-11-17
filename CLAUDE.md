@@ -24,8 +24,8 @@ Hay una app hermana de Finanzas (repo `lsmiguel91-ui/finanzas`) con la que ésta
 2. **Validar el JS después de CADA cambio**: extraer los `<script>` y pasarlos por `vm.Script`
    (no `node --check`: da falsos positivos con `const` repetido en funciones distintas).
 3. **Probar en Chromium a 1280 px y a 375 px** antes de publicar, con los datos reales de Drive
-   sembrados en `localStorage` bajo la clave `bitacora_ganadera_v3`. Playwright y Chromium ya
-   están instalados; no reinstalarlos.
+   sembrados en `localStorage` bajo la clave `bitacora_ganadera_v3`. Servir el repo con
+   `python3 -m http.server` y abrirlo con Playwright/Chromium (si falta, instalarlo con pip o npm).
 4. **Al publicar, subir `APP_VERSION` (index.html) y `VERSION` (sw.js) en el MISMO commit.**
    Sin eso el service worker no entrega la versión nueva y el usuario sigue viendo la vieja.
 5. **Canary antes de entregar**: `grep -c "prompt("` = 0 y
@@ -33,7 +33,22 @@ Hay una app hermana de Finanzas (repo `lsmiguel91-ui/finanzas`) con la que ésta
    código, el repositorio es público y se piden una vez por dispositivo a `localStorage`.
 6. **Nunca presentar y corregir después.** Si falla, corregir, verificar de nuevo, y recién entregar.
 7. **Nunca duplicar lógica de cálculo** entre Lotes, Análisis, Finanzas y el banner: se centraliza.
-8. Respaldo fechado a OneDrive `LUIS MIGUEL IA APPS\_versiones\ganaderia\` en cada publicación.
+8. Respaldo de cada publicación: tag `vN` en el commit publicado, subido con `git push origin vN`
+   (desde el 17-nov-2026; antes eran copias fechadas en OneDrive `_versiones\ganaderia\`, que
+   quedan como archivo histórico).
+
+## Dónde se trabaja (desde 17-nov-2026: en la nube)
+
+Esta app se maneja desde una sesión de Claude Code en la nube (claude.ai/code o la app Claude del
+celular), para poder trabajar con la PC apagada.
+- **Una sola sesión a la vez.** No trabajar Ganadería en la PC y en la nube al mismo tiempo.
+- **Al empezar:** `git pull` de `main`. **Al terminar:** todo cambio verificado queda subido a
+  `main` con su tag; nunca dejar trabajo solo en la VM, porque se borra.
+- **Datos y referencia en Drive** (conector de Google Drive; si no está disponible en la sesión,
+  decirlo al inicio en vez de suponer datos): ver "Dónde están los datos" y "Referencia completa".
+- **Publicar solo con aprobación del usuario.** Hallazgos y propuestas en tabla (problema, causa,
+  solución, ¿aprueba?).
+- **Repo público:** no escribir aquí datos personales nuevos (correo, montos privados, ids de cuentas).
 
 ## Antes de analizar o responder cualquier cosa sobre el hato
 
@@ -166,9 +181,10 @@ fecha del peso y cálculo en pasos de protocolo · v11 formulario del boletín, 
 ## Referencia completa
 
 El detalle largo —catálogo de sanidad, protocolos, casos resueltos y errores documentados— está en
-`LUIS MIGUEL IA APPS\Skills\ganadera-1.txt`, con un resumen en
-`ganadera-1_prompt_manual.txt`. Este archivo es el extracto operativo; ante una duda de detalle,
-ir allá.
+Google Drive: `ganadera-1_referencia.txt` (id `1rVTqRdPzMg-kucFEPgPydMvDjJl4WqOm`), con un resumen en
+`ganadera-1_prompt_manual.txt` (id `1g3Isp1EF6c9A4Rj6QJzeZ3ofZxf-yzXf`). Son copias del 1-nov-2026
+(su sección "Estado publicado" está desactualizada: manda este archivo). Este archivo es el extracto
+operativo; ante una duda de detalle, ir allá.
 
 ## Cómo responde el usuario
 
