@@ -6220,26 +6220,12 @@ const CATALOGO_PROTOCOLOS = [
     categoria: 'Crianza',
     aplica: ['ternero','ternera','macho joven'],
     descripcion: 'Continúa tras el neonatal: control de peso, refuerzo mineral (Optimizador Bio) y desparasitación. El ADE (Vigantol) NO va en este protocolo: lo pone la planilla anual cada 90 días, para no duplicar dosis que se acumulan.',
-    nota: '💡 Para machos con destino comercial, activar también el add-on "Engorde Rápido".',
+    nota: '💡 Para engorde no hace falta un promotor aparte (el antiguo add-on con Engordan Plus ADE se quitó en v20: ADE cada 30 días se acumula). La ganancia sale del pasto, la sal mineralizada y este protocolo.',
     pasos: [
       { dia: 0,  nombre: 'Crecimiento · Día 0',  productos: 'Pesar y registrar condición corporal (sin inyección)', modo: 'El refuerzo mineral del Día 30 neonatal se acaba de aplicar: no repetirlo. Este peso sirve para dosificar el Optimizador Bio del Día 30 y la ivermectina del Día 60.', intervalo: 30 },
       { dia: 30, nombre: 'Crecimiento · Día 30', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Refuerzo mineral + B12, 30 días después del anterior (la etiqueta permite 15–45 días). Alternar lado respecto a la dosis anterior.', intervalo: 30 },
-      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Ivermec-JB (ivermectina 1%) 1 ml/50kg SC (cuello)', modo: 'BAJO LA PIEL de la tabla del cuello. El Vigantol ya no va en este paso: lo pone la planilla anual cada 90 días (A y D se acumulan).', intervalo: 30 },
+      { dia: 60, nombre: 'Crecimiento · Día 60', productos: 'Ivermec-JB (ivermectina 1%) 1 ml/50kg SC (cuello)', modo: 'BAJO LA PIEL de la tabla del cuello. Es la primera desparasitación inyectable del ternero (~3 meses de vida); OMITIRLA si la ivermectina de la planilla (febrero o agosto) le toca en menos de 45 días o ya se le puso. Desde aquí la desparasitación la lleva la planilla: ivermectina feb/ago y fasciolicida may/nov, sin dosis mensuales. El Vigantol tampoco va aquí: lo pone la planilla cada 90 días.', intervalo: 30 },
       { dia: 90, nombre: 'Crecimiento · Día 90', productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                               modo: 'Última dosis del ciclo. Evaluar continuar con protocolo adulto según sexo y edad.', intervalo: null },
-    ]
-  },
-  {
-    id: 'engorde_rapido',
-    nombre: 'Add-on · Engorde Rápido',
-    emoji: '🚀',
-    categoria: 'Crianza',
-    aplica: ['macho joven','novillo'],
-    descripcion: 'Complemento opcional al Protocolo de Crecimiento para machos destinados a venta comercial.',
-    nota: '⚠️ Solo para machos con destino comercial. No usar en hembras ni reproductores.',
-    pasos: [
-      { dia: 0,  nombre: 'Engorde · Día 0',  productos: 'Engordan Plus ADE 1 ml/50kg IM (anca)', modo: 'Promotor de crecimiento. Anca, golpe seco 90°. Aplicar junto al Protocolo de Crecimiento en sitio distinto.', intervalo: 30 },
-      { dia: 30, nombre: 'Engorde · Día 30', productos: 'Engordan Plus ADE 1 ml/50kg IM (anca)', modo: 'Alternar lado respecto a dosis anterior.', intervalo: 30 },
-      { dia: 60, nombre: 'Engorde · Día 60', productos: 'Engordan Plus ADE 1 ml/50kg IM (anca)', modo: 'Alternar lado. Evaluar ganancia de peso antes de continuar.', intervalo: null },
     ]
   },
   {
@@ -6290,21 +6276,6 @@ const CATALOGO_PROTOCOLOS = [
     pasos: [
       { dia: 0,  nombre: 'Pre-Servicio · Día -30', productos: 'Cuprho Plus 4-5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca) + Sefior Plus 1 ml/50kg SC (cuello)', modo: 'Cuprho Plus: lado derecho del cuello. Optimizador Bio: músculo del anca, golpe seco 90°. Sefior Plus: lado izquierdo del cuello.', intervalo: 15 },
       { dia: 15, nombre: 'Pre-Servicio · Día -15', productos: 'Optimizador Bio 1 ml/50kg IM (anca) + Sefior Plus 1 ml/50kg SC (cuello) + Plasderplus 1 ml/20kg IM (anca)', modo: 'Optimizador Bio: músculo del anca lado contrario. Sefior Plus: lado derecho del cuello. Plasderplus: músculo del anca.', intervalo: null },
-    ]
-  },
-  {
-    id: 'desparasitacion_sierra',
-    nombre: 'Desparasitación · Crecimiento y Engorde Sierra',
-    emoji: '🏔️',
-    categoria: 'Tratamiento',
-    aplica: ['vaca','toro','ternero','macho joven','novillo'],
-    descripcion: 'Control de parásitos + soporte nutricional. 4 fechas cada 30 días. Complementa (no reemplaza) la ivermectina del protocolo de vacunas.',
-    nota: '⚠️ Este protocolo complementa la desparasitación anual de vacunas — no la reemplaza. El Día 60 se suma Cuprho Plus como refuerzo inmune.',
-    pasos: [
-      { dia: 0,  nombre: 'Desparasitación · Día 0',  productos: 'Desparasitante 1 ml/50kg SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Desparasitante: cuello lado derecho, aspira antes. Optimizador Bio: músculo del anca, golpe seco 90°.', intervalo: 30 },
-      { dia: 30, nombre: 'Desparasitación · Día 30', productos: 'Desparasitante 1 ml/50kg SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Desparasitante: cuello lado izquierdo. Optimizador Bio: músculo del anca lado contrario.', intervalo: 30 },
-      { dia: 60, nombre: 'Desparasitación · Día 60', productos: 'Desparasitante 1 ml/50kg SC (cuello) + Cuprho Plus 4-5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Desparasitante y Cuprho Plus: cuello (diferentes sitios). Optimizador Bio: músculo del anca.', intervalo: 30 },
-      { dia: 90, nombre: 'Desparasitación · Día 90', productos: 'Desparasitante 1 ml/50kg SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Desparasitante: cuello lado derecho. Optimizador Bio: músculo del anca. Última dosis del ciclo.', intervalo: null },
     ]
   },
 ];
