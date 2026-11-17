@@ -701,7 +701,7 @@ tr:hover td{background:rgba(240,232,213,.3);}
 
     <div style="background:rgba(212,160,23,.08);border:1.5px solid rgba(212,160,23,.3);border-radius:12px;padding:14px 16px;">
       <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--sol);margin-bottom:8px;">📅 Protocolo especial — Manchas (preparto)</div>
-      <div style="font-size:12px;color:var(--tx2);line-height:1.6;">A los 60 días antes del parto (~17 jul 2026), aplicar 1 dosis de <strong>Selenio + Vitamina E inyectable</strong> (E-Se de Tornel o similar). Previene retención de placenta y da anticuerpos al ternero. Esta dosis ya está coordinada con el protocolo preparto.</div>
+      <div style="font-size:12px;color:var(--tx2);line-height:1.6;">Se usa el protocolo <strong>Pre-Parto</strong> de la app, 45 días antes del parto: <strong>Cuprho Plus</strong> (cobre + cobalto) y <strong>Optimizador Bio</strong>, que ya trae selenio y vitamina E. Previene retención de placenta y ayuda a que vuelva a preñarse. No hace falta comprar un selenio + vitamina E aparte.</div>
     </div>
   </div>
 </div>
@@ -3374,11 +3374,12 @@ function dosisConPeso(texto, animalId) {
   const re = /(\d+(?:[.,]\d+)?)\s*ml\s*(?:\/\s*|por\s+cada\s+|cada\s+)(\d+(?:[.,]\d+)?)\s*kg/gi;
   const partes = []; let m;
   while ((m = re.exec(t)) !== null) partes.push([parseFloat(m[1].replace(',', '.')), parseFloat(m[2].replace(',', '.'))]);
-  if (!partes.length) return t;
+  const cuprho = /Cuprho Plus[^+]*según peso/i.test(t);   // etiqueta: 2 ml hasta 200 kg, 3 ml 200–250 kg, 5 ml más de 250 kg
+  if (!partes.length && !cuprho) return t;
   const reg = ultimoPesoRegAnimal(animalId);
   if (!reg) return t + ' — ⚠️ registra el peso para calcular los ml';
-  const calc = partes.filter(x => x[1] > 0)
-    .map(x => (Math.max(0.5, Math.round(reg.peso * x[0] / x[1] * 10) / 10)) + ' ml').join(' + ');
+  const calc = [...(cuprho ? ['Cuprho ' + (reg.peso <= 200 ? 2 : reg.peso <= 250 ? 3 : 5) + ' ml'] : []),
+    ...partes.filter(x => x[1] > 0).map(x => (cuprho && partes.length === 1 && /Optimizador Bio/.test(t) ? 'Optimizador ' : '') + (Math.max(0.5, Math.round(reg.peso * x[0] / x[1] * 10) / 10)) + ' ml')].join(' + ');
   if (!calc) return t;
   return t + ' → <strong>' + calc + '</strong> · peso ' + reg.peso + ' kg del ' + fd(reg.fecha) + avisoPesoViejo(animalId, reg);
 }
@@ -6237,15 +6238,15 @@ const CATALOGO_PROTOCOLOS = [
     descripcion: 'Estimula inmunidad contra el virus del papiloma. 9 aplicaciones cada 12 días durante 3 meses. En cada fecha se aplican ambos productos juntos.',
     nota: null,
     pasos: [
-      { dia: 0,   nombre: 'Aplicación Día 0',   productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Cuprho Plus: pellizca piel lado derecho del cuello, aguja 45°, aspira antes. Optimizador Bio: músculo del anca, palmadas previas, golpe seco 90°, aspira antes, aguja 18G x 1.5".', intervalo: 12 },
-      { dia: 12,  nombre: 'Aplicación Día 12',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Cuprho Plus: lado izquierdo del cuello. Optimizador Bio: anca lado contrario al anterior.', intervalo: 12 },
-      { dia: 24,  nombre: 'Aplicación Día 24',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 36,  nombre: 'Aplicación Día 36',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 48,  nombre: 'Aplicación Día 48',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 60,  nombre: 'Aplicación Día 60',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 72,  nombre: 'Aplicación Día 72',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 84,  nombre: 'Aplicación Día 84',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
-      { dia: 96,  nombre: 'Aplicación Día 96',  productos: 'Cuprho Plus 5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Última dosis del ciclo. Evaluar regresión de verrugas.', intervalo: null },
+      { dia: 0,   nombre: 'Aplicación Día 0',   productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Cuprho Plus: pellizca piel lado derecho del cuello, aguja 45°, aspira antes. Optimizador Bio: músculo del anca, palmadas previas, golpe seco 90°, aspira antes, aguja 18G x 1.5".', intervalo: 12 },
+      { dia: 12,  nombre: 'Aplicación Día 12',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Cuprho Plus: lado izquierdo del cuello. Optimizador Bio: anca lado contrario al anterior.', intervalo: 12 },
+      { dia: 24,  nombre: 'Aplicación Día 24',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 36,  nombre: 'Aplicación Día 36',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 48,  nombre: 'Aplicación Día 48',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 60,  nombre: 'Aplicación Día 60',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 72,  nombre: 'Aplicación Día 72',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 84,  nombre: 'Aplicación Día 84',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Alternar lados respecto a aplicación anterior.', intervalo: 12 },
+      { dia: 96,  nombre: 'Aplicación Día 96',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)',   modo: 'Última dosis del ciclo. Evaluar regresión de verrugas.', intervalo: null },
     ]
   },
   {
@@ -6257,12 +6258,9 @@ const CATALOGO_PROTOCOLOS = [
     descripcion: 'Prepara a la vaca para el parto y recuperación. Inicia 45 días antes del parto estimado.',
     nota: null,
     pasos: [
-      { dia: 0,  nombre: 'Pre-Parto · Día -45',  productos: 'Cuprho Plus 4-5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',  modo: 'Cuprho Plus: pellizca piel lado derecho del cuello, aspira antes. Optimizador Bio: músculo del anca, golpe seco 90°, aguja 18G x 1.5".', intervalo: 30 },
-      { dia: 30, nombre: 'Pre-Parto · Día -15',  productos: 'Magnacal 20 ml SC (cuello)',                                              modo: 'Pellizca amplia en el cuello. Aplicar lento por el volumen.', intervalo: 7 },
-      { dia: 37, nombre: 'Pre-Parto · Día -8',   productos: 'Magnacal 20 ml SC (cuello)',                                              modo: 'Pellizca amplia lado contrario. Aplicar lento.', intervalo: null },
-      { dia: 45, nombre: 'Parto · Día 0',         productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                    modo: 'Al momento del parto o primeras horas. Músculo del anca, golpe seco 90°.', intervalo: 8 },
-      { dia: 53, nombre: 'Post-Parto · Día +8',  productos: 'Optimizador Bio 1 ml/50kg IM (anca)',                                    modo: 'Músculo del anca lado contrario al anterior.', intervalo: 7 },
-      { dia: 60, nombre: 'Post-Parto · Día +15', productos: 'Cuprho Plus 4-5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca)',  modo: 'Cuprho Plus: lado izquierdo del cuello. Optimizador Bio: músculo del anca.', intervalo: null },
+      { dia: 0,  nombre: 'Pre-Parto · Día -45',  productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Cuprho Plus (cobre + cobalto): SOLO subcutáneo, delante de la paleta, en la piel suelta de la tabla del cuello; no pasar la dosis de su etiqueta (el exceso de cobre puede ser mortal) y no sumar otro producto de cobre. Optimizador Bio: músculo del anca, golpe seco 90°, aguja 18G x 1.5". Cobre y selenio en el último tercio de la gestación ayudan a que la placenta se suelte y a que la vaca vuelva a preñarse.', intervalo: 45 },
+      { dia: 45, nombre: 'Parto · Día 0',         productos: 'Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Al momento del parto o primeras horas. Músculo del anca, golpe seco 90°. Sin calcio de rutina (Magnacal): en una vaca de cría como Manchas la fiebre de leche es rara; si al parir se cae, tiembla o tiene orejas frías, llamar al veterinario (el calcio va por la vena).', intervalo: 15 },
+      { dia: 60, nombre: 'Post-Parto · Día +15', productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Cuprho Plus (cobre + cobalto): SOLO subcutáneo, delante de la paleta, en la piel suelta de la tabla del cuello; no pasar la dosis de su etiqueta (el exceso de cobre puede ser mortal) y no sumar otro producto de cobre. Optimizador Bio: anca lado contrario al del parto (la etiqueta pide al menos 15 días entre dosis).', intervalo: null },
     ]
   },
   {
@@ -6274,8 +6272,8 @@ const CATALOGO_PROTOCOLOS = [
     descripcion: 'Mejora la condición reproductiva antes del servicio o inseminación artificial. Inicia 30 días antes.',
     nota: null,
     pasos: [
-      { dia: 0,  nombre: 'Pre-Servicio · Día -30', productos: 'Cuprho Plus 4-5 ml SC (cuello) + Optimizador Bio 1 ml/50kg IM (anca) + Sefior Plus 1 ml/50kg SC (cuello)', modo: 'Cuprho Plus: lado derecho del cuello. Optimizador Bio: músculo del anca, golpe seco 90°. Sefior Plus: lado izquierdo del cuello.', intervalo: 15 },
-      { dia: 15, nombre: 'Pre-Servicio · Día -15', productos: 'Optimizador Bio 1 ml/50kg IM (anca) + Sefior Plus 1 ml/50kg SC (cuello) + Plasderplus 1 ml/20kg IM (anca)', modo: 'Optimizador Bio: músculo del anca lado contrario. Sefior Plus: lado derecho del cuello. Plasderplus: músculo del anca.', intervalo: null },
+      { dia: 0,  nombre: 'Pre-Servicio · Día -30', productos: 'Cuprho Plus SC (cuello) según peso: 2 ml hasta 200 kg · 3 ml 200–250 kg · 5 ml más de 250 kg + Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Cuprho Plus (cobre + cobalto): SOLO subcutáneo, delante de la paleta, en la piel suelta de la tabla del cuello; no pasar la dosis de su etiqueta (el exceso de cobre puede ser mortal) y no sumar otro producto de cobre. Omitir el Cuprho si recibió una dosis hace menos de 45 días (por ejemplo el Día +15 del post-parto); el Optimizador sí va.', intervalo: 15 },
+      { dia: 15, nombre: 'Pre-Servicio · Día -15', productos: 'Optimizador Bio 1 ml/50kg IM (anca)', modo: 'Músculo del anca, lado contrario. Selenio, fósforo y minerales para el celo. No hace falta Selfos Plus ni Phosforplus: repetirían el selenio y el fósforo del Optimizador y la vitamina A-D del Vigantol de la planilla.', intervalo: null },
     ]
   },
 ];
@@ -7745,14 +7743,14 @@ const PLANILLA_ANUAL = [
   {id:'papilomatosis', nombre:'Papilomatosis · Verrugas',   tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'todos',   intervaloLabel:'9 dosis cada 12 días (3 meses) — asignar al detectar',
    desc:'9 aplicaciones cada 12 días. Cuprho Plus + Optimizador Bio en cada dosis.',
-   dosis:'Cuprho Plus 5 ml SC + Optimizador Bio 1 ml/50kg IM', via:'Ver protocolo detallado en Guía', quien:'tú mismo'},
+   dosis:'Cuprho Plus SC según peso (2/3/5 ml) + Optimizador Bio 1 ml/50kg IM', via:'Ver protocolo detallado en Guía', quien:'tú mismo'},
   {id:'preparto',  nombre:'Protocolo Pre-Parto',        tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'hembra',  intervaloLabel:'Inicia 45 días antes del parto estimado',
-   desc:'Prepara la vaca para el parto. 6 pasos desde D-45 hasta D+15. Activa 45d antes del parto.',
+   desc:'Prepara la vaca para el parto. 3 pasos: D-45 (Cuprho Plus + Optimizador Bio), parto (Optimizador Bio) y D+15 (Cuprho Plus + Optimizador Bio). Activa 45d antes del parto.',
    dosis:'Ver protocolo detallado', via:'Ver guía', quien:'tú mismo'},
   {id:'preservicio', nombre:'Pre-Servicio',               tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'hembra',  intervaloLabel:'30 días antes de temporada de servicio',
-   desc:'Mejora condición reproductiva antes del servicio o inseminación. Cuprho Plus + Optimizador Bio + Sefior Plus.',
+   desc:'Mejora condición reproductiva antes del servicio o inseminación. D-30 Cuprho Plus + Optimizador Bio; D-15 Optimizador Bio.',
    dosis:'Ver protocolo detallado', via:'Ver guía', quien:'tú mismo'},
   {id:'neonatal',  nombre:'Protocolo Neonatal',         tipo:'trat', cat:'💊 Tratamientos',
    meses:null,    aplica:'ternero', intervaloLabel:'Al nacimiento — 4 dosis hasta D30',
