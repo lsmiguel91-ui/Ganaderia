@@ -1079,8 +1079,10 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v21';
-const APP_FECHA = '2026-11-18';
+const APP_VERSION = 'v22';   // solo interno (caché del service worker); no se muestra
+const APP_FECHA = '2026-11-18';   // fecha de la publicación: es lo que ve el usuario
+// «App actualizada 18-nov-2026»
+const appActualizadaTxt = () => { const [a, m, d] = APP_FECHA.split('-'); return 'App actualizada ' + d + '-' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m) - 1] + '-' + a; };
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -1642,7 +1644,7 @@ function mesDeStr(str) { // "2025-07-15" → 7
 // ── Respaldo local (.json): la única copia independiente de Drive y del navegador ──
 function abrirModalDatos() {
   if (typeof renderConexionEstado === 'function') renderConexionEstado();
-  const av = document.getElementById('app-ver'); if (av) av.textContent = APP_VERSION + ' · ' + APP_FECHA;
+  const av = document.getElementById('app-ver'); if (av) av.textContent = appActualizadaTxt();
   renderBackupEstado();
   document.getElementById('modal-datos').classList.add('open');
 }
@@ -7435,7 +7437,7 @@ function generarAlertasPesoCC() {
 (async function init() {
   try {
     const _avh = document.getElementById('app-ver-head');
-    if (_avh) _avh.textContent = APP_VERSION + ' · ' + APP_FECHA;
+    if (_avh) _avh.textContent = appActualizadaTxt();
     const s = localStorage.getItem(SK);
     if (s) {
       const parsed = JSON.parse(s);
