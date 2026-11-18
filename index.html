@@ -1079,8 +1079,8 @@ tr:hover td{background:rgba(240,232,213,.3);}
 //  CONFIG
 // ══════════════════════════════════════════════════════
 // Versión publicada: debe coincidir con VERSION de sw.js (se suben juntos en el mismo commit)
-const APP_VERSION = 'v20';
-const APP_FECHA = '2026-11-17';
+const APP_VERSION = 'v21';
+const APP_FECHA = '2026-11-18';
 // ── Conexión con Drive y con Finanzas ──
 // Las direcciones de los Apps Script NO van en el código: el repositorio es público y esos
 // endpoints no tienen autenticación. Se piden una vez por dispositivo y quedan en localStorage.
@@ -4022,6 +4022,119 @@ function registrarVentaDesdeSimulador(simIid, itIdx, lid, precio, pesoLb, cantPe
 }
 
 
+// ── Piso de venta por lote: fuente única para el semáforo, el análisis y la señal que va a Finanzas ──
+// El precio normal del mercado NO es el piso: un lote comprado caro pierde capital si se vende a ese precio.
+const GANANCIA_KG_DIA = {
+  0:{cons:0.5,opt:0.8}, 1:{cons:0.3,opt:0.5}, 2:{cons:0.6,opt:0.9},
+  3:{cons:0.5,opt:0.7}, 4:{cons:0.4,opt:0.6}, 5:{cons:0.4,opt:0.6}
+};
+const TASA_REF_ANUAL_LOTE = 6.5;   // referencia: plazo fijo CPN
+function itemsLoteNorm(lote) {
+  return (lote.items||[]).map((it,i) => ({
+    ...it,
+    fechaCompra: it.fechaCompra || lote.fechaCompra || hoy(),
+    pesoLb: it.pesoLb ?? lote.pesoLb ?? null,
+    itemIdx: i
+  }));
+}
+function fechaVentaEstLote(lote) {
+  return lote.fventaEst || ((lote.plazoEst && lote.fechaCompra) ? fechaPorPlazo(lote.fechaCompra, lote.plazoEst) : null);
+}
+// Equilibrio (debajo pierdes capital) y objetivo (rinde como el CPN con tu 50%) por $/lb de peso proyectado
+function pisoVentaItem(lote, itIdx) {
+  const items = itemsLoteNorm(lote); const it = items[itIdx]; if (!it) return null;
+  const hayMultiItem = items.length > 1;
+  const esParcial = lote.modo === 'parcial';
+  const dC = getDesgloseCostoLote(lote);
+  const ci = getCatIndex(it.tipo);
+  const ganancia = GANANCIA_KG_DIA[ci] || GANANCIA_KG_DIA[5];
+  const diasIt = Math.max(0, Math.round((new Date() - parseFechaLocal(it.fechaCompra)) / 86400000));
+  const cantTotal = parseInt(it.cantidad)||0;
+  const pendIt = esParcial ? getCabezasPorItem(lote, itIdx) : cantTotal;
+  const ingresoItem = esParcial
+    ? (lote.ventasParciales||[]).filter(v=>v.itemIdx===itIdx).reduce((s,v)=>s+(parseFloat(v.valorTotal)||0),0)
+    : 0;
+  const ingresoEfectivo = hayMultiItem ? ingresoItem : (esParcial ? getIngresoTotalParcial(lote) : 0);
+  const kgIt = it.pesoLb ? it.pesoLb/2.205 : null;
+  const pesoProyConsLb = kgIt ? Math.round((kgIt+ganancia.cons*diasIt)*2.205*pendIt) : null;
+  const pesoProyOptLb  = kgIt ? Math.round((kgIt+ganancia.opt*diasIt)*2.205*pendIt)  : null;
+  const costoItemProp = hayMultiItem
+    ? (() => {
+        const totalCapItem = (lote.items||[]).reduce((s,i)=>s+(parseFloat(i.valorCompra)||0),0)||1;
+        return dC.costoTotal * ((parseFloat(it.valorCompra)||0) / totalCapItem);
+      })()
+    : dC.costoTotal;
+  const roiMinPeriodo = diasIt>0 ? TASA_REF_ANUAL_LOTE*(diasIt/365) : TASA_REF_ANUAL_LOTE;
+  const capitalEfectivo = hayMultiItem ? (parseFloat(it.valorCompra)||0) : dC.capitalLM;
+  const costoEfectivo   = hayMultiItem ? costoItemProp : dC.costoTotal;
+  const ingresoObjetivo = capitalEfectivo*(1+roiMinPeriodo/50)+(costoEfectivo-capitalEfectivo);
+  const faltanteObjetivo = ingresoObjetivo-ingresoEfectivo;
+  const objetivoYaAlcanzado = faltanteObjetivo<=0;
+  const precioMinConsLb = (!objetivoYaAlcanzado&&pesoProyConsLb>0)?faltanteObjetivo/pesoProyConsLb:null;
+  const precioMinOptLb  = (!objetivoYaAlcanzado&&pesoProyOptLb>0)?faltanteObjetivo/pesoProyOptLb:null;
+  const faltanteBreakeven = costoEfectivo-ingresoEfectivo;
+  const capitalYaRecuperado = faltanteBreakeven<=0;
+  const precioIndif = (!capitalYaRecuperado&&pesoProyConsLb>0)?faltanteBreakeven/pesoProyConsLb:null;
+  return { ci, ganancia, diasIt, cantTotal, pendIt, ingresoEfectivo, pesoProyConsLb, pesoProyOptLb, costoItemProp,
+    roiMinPeriodo, capitalEfectivo, costoEfectivo, faltanteObjetivo, objetivoYaAlcanzado, precioMinConsLb, precioMinOptLb,
+    faltanteBreakeven, capitalYaRecuperado, precioIndif };
+}
+// Señal de venta del lote: mercado (MKT) + piso del lote + fecha estimada de venta.
+// «No aceptes menos de» = mayor entre lo normal del mercado y el equilibrio del lote.
+// Antes de la fecha estimada de venta el lote está «En engorde», no «VENDE».
+function senalVentaLote(lote, itIdx) {
+  itIdx = itIdx || 0;
+  const items = itemsLoteNorm(lote); const it = items[itIdx]; if (!it) return null;
+  const ci = getCatIndex(it.tipo); if (ci < 0) return null;
+  const P = pisoVentaItem(lote, itIdx);
+  const sv = MKT.senalVenta(ci);
+  const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const hoyD = new Date();
+  const fVenta = loteCerrado(lote) ? null : fechaVentaEstLote(lote);
+  const enEngorde = !!fVenta && fVenta > hoy();
+  const conPeso = !!(P && P.pesoProyConsLb > 0);
+  const capRec = !!(P && P.capitalYaRecuperado);
+  const eq = (conPeso && P.precioIndif > 0) ? P.precioIndif : null;
+  const obj = (conPeso && P.precioMinConsLb > 0) ? P.precioMinConsLb : null;
+  const mkt = sv ? sv.precioMin : null;
+  const piso = Math.max(mkt||0, eq||0) || null;
+  const lb = v => '$' + v.toFixed(3) + '/lb';
+  let key, icon, titulo, texto;
+  if (sv) {
+    key = sv.key; icon = sv.icon; titulo = sv.titulo;
+    texto = sv.texto.replace(/\s*No aceptes menos de \$[\d.,]+\/lb\.?/, '').trim();
+    if (!enEngorde && eq && sv.nivel < eq) {
+      key = 'err'; icon = '🔴'; titulo = 'PRECIO DE HOY BAJO TU EQUILIBRIO — venderías perdiendo capital';
+    }
+  } else {
+    key = 'warn'; icon = '🟡'; titulo = 'Sin datos suficientes'; texto = 'Faltan boletines para evaluar ' + CAT_NOMBRES[ci] + '.';
+  }
+  if (enEngorde) {
+    texto = 'Mercado hoy: ' + titulo + '. ' + texto;
+    key = 'engorde'; icon = '🌱'; titulo = 'EN ENGORDE — venta estimada ' + fd(fVenta);
+  }
+  if (piso) texto += ' No aceptes menos de ' + lb(piso) + '.';
+  const sColorKey = key === 'engorde' ? 'tx2' : key;
+  const color = key === 'ok' ? 'var(--pasto)' : key === 'warn' ? 'var(--sol)' : key === 'err' ? 'var(--rojo)' : 'var(--tx2)';
+  const sBanner = key === 'engorde'
+    ? titulo
+    : (key === 'ok' ? '✅ ' : key === 'warn' ? '⚠️ ' : '❌ ') + 'PARA VENDER — ' + titulo;
+  let detalleHtml = '';
+  if (capRec) detalleHtml = '✅ Capital recuperado con lo vendido: lo que venga es ganancia.';
+  else if (eq) detalleHtml = '⛔ Equilibrio <strong>' + lb(eq) + '</strong> (debajo pierdes capital)'
+    + (obj ? ' · 🎯 objetivo <strong>' + lb(obj) + '</strong> (rinde como el CPN ' + TASA_REF_ANUAL_LOTE + '%)' : '')
+    + (mkt ? ' · mercado ' + lb(mkt) + (eq > mkt ? ' — tu equilibrio está sobre el precio normal del mercado' : '') : '');
+  else if (!conPeso) detalleHtml = '⚖️ Sin peso registrado: el piso mostrado es solo el mercado. Ingresa el peso para calcular tu equilibrio.';
+  const senal = {
+    catNom: CAT_NOMBRES[ci]||it.tipo, sIcon: icon, sBanner, sTexto: texto, sColorKey,
+    mejorMesAnio: (sv&&sv.mejorMes) ? sv.mejorMes.label : 'Ahora, si el animal está listo', mesesFuertes: [],
+    precioMin: mkt, pActual: sv ? sv.nivel : null,
+    mesLabel: MN[hoyD.getMonth()+1]+' '+hoyD.getFullYear(),
+    precioEquilibrio: eq, precioObjetivo: obj, capitalRecuperado: capRec
+  };
+  return { senal, sv, P, color, detalleHtml, enEngorde, fVenta, piso };
+}
+
 function generarAnalisisLote(loteId) {
   const sid = sanitizeLoteId(loteId);
   const panel = document.getElementById('analisis-panel-' + sid);
@@ -4042,18 +4155,8 @@ function generarAnalisisLote(loteId) {
   const anioActual = hoyDate.getFullYear();
   const allPrecios = db.precios && db.precios.length ? db.precios : PRECIOS_INICIALES;
 
-  const GANANCIA_KG_DIA = {
-    0:{cons:0.5,opt:0.8}, 1:{cons:0.3,opt:0.5}, 2:{cons:0.6,opt:0.9},
-    3:{cons:0.5,opt:0.7}, 4:{cons:0.4,opt:0.6}, 5:{cons:0.4,opt:0.6}
-  };
-
   // ── Ítems con fecha y peso por ítem (retrocompat) ──
-  const items = (lote.items||[]).map((it,i) => ({
-    ...it,
-    fechaCompra: it.fechaCompra || lote.fechaCompra || hoy(),
-    pesoLb: it.pesoLb ?? lote.pesoLb ?? null,
-    itemIdx: i
-  }));
+  const items = itemsLoteNorm(lote);
   const hayMultiItem = items.length > 1;
   const cabezasTotalLote = items.reduce((s,i)=>s+(parseInt(i.cantidad)||0),0)||1;
 
@@ -4104,24 +4207,17 @@ function generarAnalisisLote(loteId) {
   // ── Función que genera el bloque completo de análisis para UN ítem ──
   function analizarItem(it, itIdx) {
     const ci = getCatIndex(it.tipo);
-    const ganancia = GANANCIA_KG_DIA[ci] || GANANCIA_KG_DIA[5];
-    const fIt = new Date(it.fechaCompra + 'T12:00:00');
-    const diasIt = Math.max(0, Math.round((hoyDate - fIt) / 86400000));
-    const cantTotal = parseInt(it.cantidad)||0;
-    const pendIt = esParcial ? getCabezasPorItem(lote, itIdx) : cantTotal;
+    // Piso del lote y peso proyectado: fuente única (pisoVentaItem)
+    const PV = pisoVentaItem(lote, itIdx);
+    const { ganancia, diasIt, cantTotal, pendIt } = PV;
     const vendIt = cantTotal - pendIt;
-    // Ingreso ya recibido para este ítem (ventas con itemIdx === itIdx)
-    const ingresoItem = esParcial
-      ? (lote.ventasParciales||[]).filter(v=>v.itemIdx===itIdx).reduce((s,v)=>s+(parseFloat(v.valorTotal)||0),0)
-      : 0;
-    // Para lote de 1 ítem: ingresoYaRecibido total (incluye ventas sin itemIdx)
-    const ingresoEfectivo = hayMultiItem ? ingresoItem : ingresoYaRecibido;
+    // Ingreso ya recibido: del ítem (multi-ítem) o del lote completo (1 ítem)
+    const ingresoEfectivo = PV.ingresoEfectivo;
 
     // Peso proyectado
     const pesoIt = it.pesoLb;
     const kgIt = pesoIt ? pesoIt/2.205 : null;
-    const pesoProyConsLb = kgIt ? Math.round((kgIt+ganancia.cons*diasIt)*2.205*pendIt) : null;
-    const pesoProyOptLb  = kgIt ? Math.round((kgIt+ganancia.opt*diasIt)*2.205*pendIt)  : null;
+    const { pesoProyConsLb, pesoProyOptLb } = PV;
     const gananciaConsKg = kgIt ? Math.round(ganancia.cons*diasIt) : null;
     const gananciaOptKg  = kgIt ? Math.round(ganancia.opt*diasIt)  : null;
 
@@ -4157,47 +4253,30 @@ function generarAnalisisLote(loteId) {
     const difStr = difTrendLote!=null ? `$${Math.abs(difTrendLote).toFixed(3)} ${sobreTrendLote?'sobre':'bajo'} la tendencia` : '';
 
     // ── Semáforo venta — señal del motor MKT (precio vs tendencia 12m + estacionalidad confiable) ──
-    let sColor,sIcon,sBanner,sTexto;
-    const svMKT = MKT.senalVenta(ci);
-    if (svMKT) {
-      sColor = svMKT.key==='ok'?'var(--pasto)':svMKT.key==='warn'?'var(--sol)':'var(--rojo)';
-      sIcon = svMKT.icon; sBanner = (svMKT.key==='ok'?'✅ ':svMKT.key==='warn'?'⚠️ ':'❌ ') + 'PARA VENDER — ' + svMKT.titulo;
-      sTexto = svMKT.texto;
-    } else {
-      sColor='var(--sol)';sIcon='🟡';sBanner='⚠️ PARA VENDER — Sin datos suficientes';sTexto='Faltan boletines para evaluar ' + CAT_NOMBRES[ci] + '.';
-    }
+    // + piso del lote (equilibrio) y fecha estimada de venta (senalVentaLote)
+    const SVL = senalVentaLote(lote, itIdx);
+    const svMKT = SVL ? SVL.sv : null;
+    const sColor = SVL ? SVL.color : 'var(--sol)';
+    const sIcon = SVL ? SVL.senal.sIcon : '🟡';
+    const sBanner = SVL ? SVL.senal.sBanner : '⚠️ PARA VENDER — Sin datos suficientes';
+    const sTexto = SVL ? SVL.senal.sTexto : 'Faltan boletines para evaluar ' + (CAT_NOMBRES[ci]||it.tipo) + '.';
 
-    const bgSem = sColor==='var(--pasto)'?'rgba(74,124,63,.1)':sColor==='var(--sol)'?'rgba(212,160,23,.1)':'rgba(192,57,43,.08)';
+    const bgSem = sColor==='var(--pasto)'?'rgba(74,124,63,.1)':sColor==='var(--sol)'?'rgba(212,160,23,.1)':sColor==='var(--rojo)'?'rgba(192,57,43,.08)':'rgba(92,61,30,.06)';
     const semaforoHtml = `<div style="background:${bgSem};border:1.5px solid ${sColor};border-radius:12px;padding:11px 14px;margin-bottom:8px;">
       <div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:2px;">${it.tipo.charAt(0).toUpperCase()+it.tipo.slice(1)} · ${cantTotal} cab. · ${diasIt}d en campo · $${pActual.toFixed(3)}/lb ref.</div>
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:${sColor};margin-bottom:4px;">${sIcon} ${sBanner}</div>
       <div style="font-size:11px;color:var(--tx2);line-height:1.5;">${sTexto}</div>
+      ${SVL&&SVL.detalleHtml?`<div style="font-size:10px;color:var(--tx3);line-height:1.5;margin-top:3px;">${SVL.detalleHtml}</div>`:''}
     </div>`;
 
     // ── Proyección de peso + tablas ──
 
     // Costo proporcional de este ítem (para multi-ítem)
-    const costoItemProp = hayMultiItem
-      ? (() => {
-          const totalCapItem = (lote.items||[]).reduce((s,i)=>s+(parseFloat(i.valorCompra)||0),0)||1;
-          const fraccion = (parseFloat(it.valorCompra)||0) / totalCapItem;
-          return costoTotalLote * fraccion;
-        })()
-      : costoTotalLote;
+    const costoItemProp = PV.costoItemProp;
 
     // ── Precio mínimo (calculado aquí para usar en tabla consolidada) ──
-    const TASA_REF_ANUAL=6.5;
-    const roiMinPeriodo=diasIt>0?TASA_REF_ANUAL*(diasIt/365):TASA_REF_ANUAL;
-    const capitalEfectivo = hayMultiItem ? (parseFloat(it.valorCompra)||0) : capital;
-    const costoEfectivo   = hayMultiItem ? costoItemProp : costoTotalLote;
-    const ingresoObjetivo = capitalEfectivo*(1+roiMinPeriodo/50)+(costoEfectivo-capitalEfectivo);
-    const faltanteObjetivo = ingresoObjetivo-ingresoEfectivo;
-    const objetivoYaAlcanzado = faltanteObjetivo<=0;
-    const precioMinConsLb = (!objetivoYaAlcanzado&&pesoProyConsLb>0)?faltanteObjetivo/pesoProyConsLb:null;
-    const precioMinOptLb  = (!objetivoYaAlcanzado&&pesoProyOptLb>0)?faltanteObjetivo/pesoProyOptLb:null;
-    const faltanteBreakeven=costoEfectivo-ingresoEfectivo;
-    const capitalYaRecuperado=faltanteBreakeven<=0;
-    const precioIndif=(!capitalYaRecuperado&&pesoProyConsLb>0)?faltanteBreakeven/pesoProyConsLb:null;
+    const { roiMinPeriodo, capitalEfectivo, costoEfectivo, faltanteObjetivo, objetivoYaAlcanzado,
+            precioMinConsLb, precioMinOptLb, faltanteBreakeven, capitalYaRecuperado, precioIndif } = PV;
 
     // ── Tabla consolidada (Punto 2) ──
     let proyeccionHtml = '';
@@ -4370,7 +4449,9 @@ function generarAnalisisLote(loteId) {
       +simHtml
       +mesesHtml;
 
-    return { semaforoHtml, analisisHtml, senal: { catNom:CAT_NOMBRES[ci]||it.tipo, sIcon, sBanner, sTexto, sColorKey:sColor==='var(--pasto)'?'ok':sColor==='var(--sol)'?'warn':'err', posVenta, mejorMesAnio:(svMKT&&svMKT.mejorMes)?svMKT.mejorMes.label:'Ahora, si el animal está listo', mesesFuertes:[], precioMin:svMKT?svMKT.precioMin:null, mesLabel:MN[mesActual]+' '+anioActual } };
+    // Señal para Finanzas: mismo objeto que calcSenalAsogan (incluye precioEquilibrio/precioObjetivo/capitalRecuperado)
+    const senal = SVL ? { ...SVL.senal, posVenta } : { catNom:CAT_NOMBRES[ci]||it.tipo, sIcon, sBanner, sTexto, sColorKey:'warn', posVenta, mejorMesAnio:'Ahora, si el animal está listo', mesesFuertes:[], precioMin:null, mesLabel:MN[mesActual]+' '+anioActual, precioEquilibrio:null, precioObjetivo:null, capitalRecuperado:false };
+    return { semaforoHtml, analisisHtml, senal };
   }
 
   // ── Tabla resumen multi-ítem ──
@@ -6763,25 +6844,10 @@ function calcSenalAsogan(lote) {
   // Usa la señal calculada por generarAnalisisLote (fuente única de verdad)
   const senalMem = SENAL_LOTE.get(String(lote.id));
   if (senalMem) return senalMem;
-  // Fallback: recalcula si el lote nunca fue analizado en esta sesión
-  const tipoLote = (lote.items&&lote.items[0]) ? lote.items[0].tipo : 'vaca';
-  const catIdx = getCatIndex(tipoLote);
-  if (catIdx < 0) return null;
-  const hoyDate = new Date();
-  const mesActual = hoyDate.getMonth() + 1;
-  const anioActual = hoyDate.getFullYear();
-  const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  // Señal de venta — motor MKT (misma fórmula que la ficha por lote)
-  const sv = MKT.senalVenta(catIdx);
-  if (!sv) return null;
-  const sBanner=(sv.key==='ok'?'✅ ':sv.key==='warn'?'⚠️ ':'❌ ')+'PARA VENDER — '+sv.titulo;
-  return {
-    catNom: CAT_NOMBRES[catIdx]||tipoLote,
-    sIcon: sv.icon, sBanner, sTexto: sv.texto, sColorKey: sv.key,
-    mejorMesAnio: sv.mejorMes ? sv.mejorMes.label : 'Ahora, si el animal está listo', mesesFuertes: [],
-    precioMin: sv.precioMin, pActual: sv.nivel,
-    mesLabel: MN[mesActual]+' '+anioActual
-  };
+  // Fallback: lote no analizado en esta sesión → misma función que la ficha (mercado + piso del lote)
+  if (!lote.items || !lote.items.length) return null;
+  const r = senalVentaLote(lote, 0);
+  return (r && r.sv) ? r.senal : null;
 }
 
 function lotesToInvGanado() {
