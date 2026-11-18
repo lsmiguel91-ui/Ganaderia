@@ -63,6 +63,10 @@ Este orden es obligatorio y se incumplió varias veces con costo real:
 
 ## Dónde están los datos
 
+- **Todo lo de este proyecto vive en la carpeta `Ganadería` de Drive** (desde 18-nov-2026). Los archivos
+  nuevos (referencias, respaldos, entregables) se crean **dentro de esa carpeta**, nunca sueltos en la raíz.
+  Mover un archivo no cambia su id; el Apps Script busca el JSON por nombre en todo Drive.
+
 - **Ganadería**: Drive `bitacora_ganadera_datos.json`, id `1bT4HusRVnZJNsCHJWoxyMwu23WQM9mms`.
   Baja en base64; decodificar con Python, nunca copiar el base64 a mano.
 - **Finanzas**: hoja de cálculo "Finanzas personales", id
